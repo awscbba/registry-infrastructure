@@ -72,10 +72,10 @@ Actions:
         - WorkflowSource
     Configuration:
       Commands:
-        - echo "Installing just command runner..."
-        - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
-        - just --version
-        - echo "✅ just installed successfully"
+        - 'echo "Installing just command runner..."'
+        - 'curl --proto "=https" --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin'
+        - 'just --version'
+        - 'echo "✅ just installed successfully"'
     Outputs:
       Artifacts:
         - Name: just-binary
@@ -94,21 +94,21 @@ Actions:
         - just-binary
     Configuration:
       Commands:
-        - echo "Setting up environment..."
-        - cp /usr/local/bin/just /usr/local/bin/just || true
-        - chmod +x /usr/local/bin/just
-        - export PATH="/usr/local/bin:$PATH"
-        - echo "🔍 Validating infrastructure for $APPLICATION_NAME ($PROJECT_NAME)"
-        - echo "Stack: $STACK_NAME | Region: $AWS_REGION | Environment: $ENVIRONMENT"
-        - echo "Version: $APPLICATION_VERSION | Organization: $ORGANIZATION"
-        - echo "DynamoDB: $DYNAMODB_BILLING_MODE | Lambda: $LAMBDA_RUNTIME ($LAMBDA_MEMORY MB)"
-        - echo "Checking prerequisites..."
-        - just check-prerequisites
-        - echo "Running CDK synth to validate..."
-        - just cdk-synth
-        - echo "Running unit tests..."
-        - source .venv/bin/activate && python -m pytest tests/ -v || echo "No tests found"
-        - echo "✅ Infrastructure validation completed"
+        - 'echo "Setting up environment..."'
+        - 'cp /usr/local/bin/just /usr/local/bin/just || true'
+        - 'chmod +x /usr/local/bin/just'
+        - 'export PATH="/usr/local/bin:$PATH"'
+        - 'echo "🔍 Validating infrastructure for $APPLICATION_NAME ($PROJECT_NAME)"'
+        - 'echo "Stack: $STACK_NAME | Region: $AWS_REGION | Environment: $ENVIRONMENT"'
+        - 'echo "Version: $APPLICATION_VERSION | Organization: $ORGANIZATION"'
+        - 'echo "DynamoDB: $DYNAMODB_BILLING_MODE | Lambda: $LAMBDA_RUNTIME ($LAMBDA_MEMORY MB)"'
+        - 'echo "Checking prerequisites..."'
+        - 'just check-prerequisites'
+        - 'echo "Running CDK synth to validate..."'
+        - 'just cdk-synth'
+        - 'echo "Running unit tests..."'
+        - 'source .venv/bin/activate && python -m pytest tests/ -v || echo "No tests found"'
+        - 'echo "✅ Infrastructure validation completed"'
     Outputs:
       Reports:
         - Name: test-results
@@ -133,28 +133,28 @@ Actions:
         - just-binary
     Configuration:
       Commands:
-        - echo "🚀 Starting production deployment after merge to main..."
-        - echo "Application: $APPLICATION_NAME v$APPLICATION_VERSION"
-        - echo "Project: $PROJECT_NAME | Stack: $STACK_NAME | Region: $AWS_REGION"
-        - echo "Organization: $ORGANIZATION | Cost Center: $COST_CENTER"
-        - echo "Lambda: $LAMBDA_RUNTIME ($LAMBDA_MEMORY MB, ${LAMBDA_TIMEOUT}s timeout)"
-        - echo "API Gateway: $API_GATEWAY_NAME ($API_GATEWAY_STAGE stage)"
-        - echo "Setting up environment..."
-        - cp /usr/local/bin/just /usr/local/bin/just || true
-        - chmod +x /usr/local/bin/just
-        - export PATH="/usr/local/bin:$PATH"
-        - echo "Deploying infrastructure to production..."
-        - timeout $CDK_DEPLOY_TIMEOUT just deploy-infrastructure-full
-        - echo "Testing API endpoints..."
-        - just test-api
-        - echo "Creating $TEST_DATA_COUNT test records..."
-        - just create-test-data
-        - echo "Saving deployment outputs..."
-        - cp $OUTPUTS_FILE deployment-outputs-prod.json
-        - cp $DEPLOYMENT_OUTPUTS_FILE deployment-outputs-prod.env
-        - echo "Printing deployment summary..."
-        - just print-deployment-summary
-        - echo "✅ Production infrastructure deployment completed"
+        - 'echo "🚀 Starting production deployment after merge to main..."'
+        - 'echo "Application: $APPLICATION_NAME v$APPLICATION_VERSION"'
+        - 'echo "Project: $PROJECT_NAME | Stack: $STACK_NAME | Region: $AWS_REGION"'
+        - 'echo "Organization: $ORGANIZATION | Cost Center: $COST_CENTER"'
+        - 'echo "Lambda: $LAMBDA_RUNTIME ($LAMBDA_MEMORY MB, ${LAMBDA_TIMEOUT}s timeout)"'
+        - 'echo "API Gateway: $API_GATEWAY_NAME ($API_GATEWAY_STAGE stage)"'
+        - 'echo "Setting up environment..."'
+        - 'cp /usr/local/bin/just /usr/local/bin/just || true'
+        - 'chmod +x /usr/local/bin/just'
+        - 'export PATH="/usr/local/bin:$PATH"'
+        - 'echo "Deploying infrastructure to production..."'
+        - 'timeout $CDK_DEPLOY_TIMEOUT just deploy-infrastructure-full'
+        - 'echo "Testing API endpoints..."'
+        - 'just test-api'
+        - 'echo "Creating $TEST_DATA_COUNT test records..."'
+        - 'just create-test-data'
+        - 'echo "Saving deployment outputs..."'
+        - 'cp $OUTPUTS_FILE deployment-outputs-prod.json'
+        - 'cp $DEPLOYMENT_OUTPUTS_FILE deployment-outputs-prod.env'
+        - 'echo "Printing deployment summary..."'
+        - 'just print-deployment-summary'
+        - 'echo "✅ Production infrastructure deployment completed"'
     Outputs:
       Artifacts:
         - Name: prod-infrastructure-outputs
@@ -185,23 +185,23 @@ Actions:
         - prod-infrastructure-outputs
     Configuration:
       Commands:
-        - echo "🎨 Starting frontend deployment after infrastructure..."
-        - echo "Project: $PROJECT_NAME | Environment: $ENVIRONMENT"
-        - echo "Setting up environment..."
-        - cp /usr/local/bin/just /usr/local/bin/just || true
-        - chmod +x /usr/local/bin/just
-        - export PATH="/usr/local/bin:$PATH"
-        - echo "Restoring deployment outputs..."
-        - cp deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE
-        - echo "Deploying frontend..."
-        - just deploy-frontend-full
-        - echo "Testing frontend..."
-        - just test-frontend
-        - echo "Validating complete deployment..."
-        - just validate-deployment
-        - echo "Final deployment summary..."
-        - just print-deployment-summary
-        - echo "✅ Frontend deployment completed"
+        - 'echo "🎨 Starting frontend deployment after infrastructure..."'
+        - 'echo "Project: $PROJECT_NAME | Environment: $ENVIRONMENT"'
+        - 'echo "Setting up environment..."'
+        - 'cp /usr/local/bin/just /usr/local/bin/just || true'
+        - 'chmod +x /usr/local/bin/just'
+        - 'export PATH="/usr/local/bin:$PATH"'
+        - 'echo "Restoring deployment outputs..."'
+        - 'cp deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE'
+        - 'echo "Deploying frontend..."'
+        - 'just deploy-frontend-full'
+        - 'echo "Testing frontend..."'
+        - 'just test-frontend'
+        - 'echo "Validating complete deployment..."'
+        - 'just validate-deployment'
+        - 'echo "Final deployment summary..."'
+        - 'just print-deployment-summary'
+        - 'echo "✅ Frontend deployment completed"'
     # CRITICAL: Only run on main branch pushes (after merge approval)
     Condition:
       StringEquals:
@@ -226,27 +226,27 @@ Actions:
         - prod-infrastructure-outputs
     Configuration:
       Commands:
-        - echo "🧪 Running integration tests after deployment..."
-        - echo "Project: $PROJECT_NAME | Timeout: $INTEGRATION_TEST_TIMEOUT seconds"
-        - echo "Setting up environment..."
-        - cp /usr/local/bin/just /usr/local/bin/just || true
-        - chmod +x /usr/local/bin/just
-        - export PATH="/usr/local/bin:$PATH"
-        - echo "Restoring deployment outputs..."
-        - cp deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE
-        - echo "Running integration tests..."
-        - source $DEPLOYMENT_OUTPUTS_FILE
-        - echo "Testing API health endpoint..."
-        - timeout $HEALTH_CHECK_TIMEOUT curl -f "$API_URL/health" || exit 1
-        - echo "Testing API people endpoint..."
-        - timeout $HEALTH_CHECK_TIMEOUT curl -f "$API_URL/people" || exit 1
-        - echo "Testing frontend accessibility..."
-        - timeout $HEALTH_CHECK_TIMEOUT curl -f -I "$FRONTEND_URL" || exit 1
-        - echo "Verifying test data..."
-        - PEOPLE_COUNT=$(curl -s "$API_URL/people" | jq length)
-        - echo "People count: $PEOPLE_COUNT"
-        - if [ "$PEOPLE_COUNT" -lt 1 ]; then echo "No people found, test failed"; exit 1; fi
-        - echo "✅ All integration tests passed!"
+        - 'echo "🧪 Running integration tests after deployment..."'
+        - 'echo "Project: $PROJECT_NAME | Timeout: $INTEGRATION_TEST_TIMEOUT seconds"'
+        - 'echo "Setting up environment..."'
+        - 'cp /usr/local/bin/just /usr/local/bin/just || true'
+        - 'chmod +x /usr/local/bin/just'
+        - 'export PATH="/usr/local/bin:$PATH"'
+        - 'echo "Restoring deployment outputs..."'
+        - 'cp deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE'
+        - 'echo "Running integration tests..."'
+        - 'source $DEPLOYMENT_OUTPUTS_FILE'
+        - 'echo "Testing API health endpoint..."'
+        - 'timeout $HEALTH_CHECK_TIMEOUT curl -f "$API_URL/health" || exit 1'
+        - 'echo "Testing API people endpoint..."'
+        - 'timeout $HEALTH_CHECK_TIMEOUT curl -f "$API_URL/people" || exit 1'
+        - 'echo "Testing frontend accessibility..."'
+        - 'timeout $HEALTH_CHECK_TIMEOUT curl -f -I "$FRONTEND_URL" || exit 1'
+        - 'echo "Verifying test data..."'
+        - 'PEOPLE_COUNT=$(curl -s "$API_URL/people" | jq length)'
+        - 'echo "People count: $PEOPLE_COUNT"'
+        - 'if [ "$PEOPLE_COUNT" -lt 1 ]; then echo "No people found, test failed"; exit 1; fi'
+        - 'echo "✅ All integration tests passed!"'
     # CRITICAL: Only run on main branch pushes (after merge approval)
     Condition:
       StringEquals:
@@ -266,21 +266,21 @@ Actions:
         - prod-infrastructure-outputs
     Configuration:
       Commands:
-        - echo "📢 Deployment Notification"
-        - echo "=========================="
-        - echo "✅ Production deployment completed successfully!"
-        - echo "🔗 Project: $PROJECT_NAME"
-        - echo "🏗️  Stack: $STACK_NAME"
-        - echo "🌍 Region: $AWS_REGION"
-        - echo "🔧 Environment: $ENVIRONMENT"
-        - echo "📅 Deployment time: $(date)"
-        - echo "🏷️  Commit: ${WorkflowSource.CommitId}"
-        - echo "👤 Author: ${WorkflowSource.CommitAuthor}"
-        - source deployment-outputs-prod.env
-        - echo "🌐 Frontend URL: $FRONTEND_URL"
-        - echo "🔧 API URL: $API_URL"
-        - echo "📊 All systems operational"
-        - echo "=========================="
+        - 'echo "📢 Deployment Notification"'
+        - 'echo "=========================="'
+        - 'echo "✅ Production deployment completed successfully!"'
+        - 'echo "🔗 Project: $PROJECT_NAME"'
+        - 'echo "🏗️  Stack: $STACK_NAME"'
+        - 'echo "🌍 Region: $AWS_REGION"'
+        - 'echo "🔧 Environment: $ENVIRONMENT"'
+        - 'echo "📅 Deployment time: $(date)"'
+        - 'echo "🏷️  Commit: ${WorkflowSource.CommitId}"'
+        - 'echo "👤 Author: ${WorkflowSource.CommitAuthor}"'
+        - 'source deployment-outputs-prod.env'
+        - 'echo "🌐 Frontend URL: $FRONTEND_URL"'
+        - 'echo "🔧 API URL: $API_URL"'
+        - 'echo "📊 All systems operational"'
+        - 'echo "=========================="'
     # CRITICAL: Only run on main branch pushes (after merge approval)
     Condition:
       StringEquals:
