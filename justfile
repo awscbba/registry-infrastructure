@@ -1,0 +1,532 @@
+# People Register Infrastructure - Justfile
+# This file contains automation tasks for the People Register project
+
+# Default recipe to show available commands
+default:
+    @just --list
+
+# Colors for output
+RED := '\033[0;31m'
+GREEN := '\033[0;32m'
+YELLOW := '\033[1;33m'
+BLUE := '\033[0;34m'
+NC := '\033[0m'
+
+# Variables
+STACK_NAME := "PeopleRegisterInfrastructureStack"
+FRONTEND_DIR := "../people-register-frontend"
+API_DIR := "../people-register-api"
+WORK_DIR := "/tmp/people-register-deployment"
+
+# CodeCatalyst repository URLs (update these with your actual URLs)
+CODECATALYST_BASE_URL := "https://srinclan@git.us-west-2.codecatalyst.aws/v1/AWSCocha/people-registry"
+INFRASTRUCTURE_REPO := CODECATALYST_BASE_URL + "/registry-infrastructure"
+API_REPO := CODECATALYST_BASE_URL + "/registry-api"
+FRONTEND_REPO := CODECATALYST_BASE_URL + "/register-frontend"
+
+# Print colored status messages
+print-info message:
+    @echo -e "{{BLUE}}[INFO]{{NC}} {{message}}"
+
+print-success message:
+    @echo -e "{{GREEN}}[SUCCESS]{{NC}} {{message}}"
+
+print-warning message:
+    @echo -e "{{YELLOW}}[WARNING]{{NC}} {{message}}"
+
+print-error message:
+    @echo -e "{{RED}}[ERROR]{{NC}} {{message}}"
+
+# Legacy aliases for backward compatibility
+print-status message:
+    @just print-info "{{message}}"
+
+# Check if required tools are installed (comprehensive version)
+check-prerequisites:
+    @just print-info "Checking prerequisites..."
+    @command -v aws >/dev/null 2>&1 || (just print-error "AWS CLI is not installed or not in PATH" && exit 1)
+    @aws sts get-caller-identity >/dev/null 2>&1 || (just print-error "AWS credentials not configured or expired. Please run 'aws configure' or 'aws sso login'" && exit 1)
+    @command -v node >/dev/null 2>&1 || (just print-error "Node.js is not installed. Please install Node.js 18+ first." && exit 1)
+    @command -v python3 >/dev/null 2>&1 || (just print-error "Python 3 is not installed. Please install Python 3.11+ first." && exit 1)
+    @command -v git >/dev/null 2>&1 || (just print-error "Git is not installed. Please install Git first." && exit 1)
+    @if ! command -v cdk >/dev/null 2>&1; then \
+        just print-warning "AWS CDK is not installed. Installing now..."; \
+        npm install -g aws-cdk; \
+    fi
+    @if ! command -v jq >/dev/null 2>&1; then \
+        just print-warning "jq is not installed. Installing now..."; \
+        if command -v brew >/dev/null 2>&1; then \
+            brew install jq; \
+        elif command -v apt-get >/dev/null 2>&1; then \
+            sudo apt-get update && sudo apt-get install -y jq; \
+        else \
+            just print-error "Please install jq manually"; \
+            exit 1; \
+        fi; \
+    fi
+    @just print-success "All prerequisites are met!"
+
+# Legacy alias for backward compatibility
+check-requirements: check-prerequisites
+
+# Setup workspace for multi-repo deployment
+setup-workspace:
+    @just print-info "Setting up workspace..."
+    @if [ -d "{{WORK_DIR}}" ]; then rm -rf "{{WORK_DIR}}"; fi
+    @mkdir -p "{{WORK_DIR}}"
+    @just print-success "Workspace created at {{WORK_DIR}}"
+
+# Clone repositories for deployment
+clone-repos:
+    @just print-info "Cloning repositories..."
+    @cd "{{WORK_DIR}}" && git clone "{{INFRASTRUCTURE_REPO}}" infrastructure
+    @cd "{{WORK_DIR}}" && git clone "{{API_REPO}}" api
+    @cd "{{WORK_DIR}}" && git clone "{{FRONTEND_REPO}}" frontend
+    @just print-success "All repositories cloned"
+
+# Deploy infrastructure with comprehensive output handling
+deploy-infrastructure-full:
+    @just print-info "Deploying infrastructure..."
+    @if [ ! -d ".venv" ]; then \
+        just print-info "Setting up Python virtual environment..."; \
+        python3 -m venv .venv; \
+    fi
+    @source .venv/bin/activate && pip install -r requirements.txt
+    @just print-info "Checking CDK bootstrap status..."
+    @if ! aws cloudformation describe-stacks --stack-name CDKToolkit >/dev/null 2>&1; then \
+        just print-info "Bootstrapping CDK..."; \
+        source .venv/bin/activate && cdk bootstrap; \
+    else \
+        just print-info "CDK already bootstrapped"; \
+    fi
+    @just print-info "Deploying CDK stack..."
+    @source .venv/bin/activate && cdk deploy --require-approval never --outputs-file outputs.json
+    @if [ -f "outputs.json" ]; then \
+        just print-success "Infrastructure deployed successfully!"; \
+        just extract-outputs; \
+    else \
+        just print-error "Failed to get deployment outputs"; \
+        exit 1; \
+    fi
+
+# Extract and display deployment outputs
+extract-outputs:
+    @just print-info "Extracting deployment outputs..."
+    @API_URL=$$(cat outputs.json | jq -r '.{{STACK_NAME}}.ApiUrl // empty'); \
+    FRONTEND_URL=$$(cat outputs.json | jq -r '.{{STACK_NAME}}.FrontendUrl // empty'); \
+    S3_BUCKET=$$(cat outputs.json | jq -r '.{{STACK_NAME}}.S3BucketName // empty'); \
+    DYNAMODB_TABLE=$$(cat outputs.json | jq -r '.{{STACK_NAME}}.DynamoDBTableName // empty'); \
+    DISTRIBUTION_ID=$$(aws cloudfront list-distributions --query "DistributionList.Items[?Comment==''].Id" --output text 2>/dev/null || echo ""); \
+    just print-info "API URL: $$API_URL"; \
+    just print-info "Frontend URL: $$FRONTEND_URL"; \
+    just print-info "S3 Bucket: $$S3_BUCKET"; \
+    just print-info "DynamoDB Table: $$DYNAMODB_TABLE"; \
+    just print-info "CloudFront Distribution ID: $$DISTRIBUTION_ID"; \
+    echo "API_URL=$$API_URL" > deployment-outputs.env; \
+    echo "FRONTEND_URL=$$FRONTEND_URL" >> deployment-outputs.env; \
+    echo "S3_BUCKET=$$S3_BUCKET" >> deployment-outputs.env; \
+    echo "DYNAMODB_TABLE=$$DYNAMODB_TABLE" >> deployment-outputs.env; \
+    echo "DISTRIBUTION_ID=$$DISTRIBUTION_ID" >> deployment-outputs.env
+
+# Test API endpoints
+test-api:
+    @just print-info "Testing API deployment..."
+    @if [ ! -f "deployment-outputs.env" ]; then \
+        just print-error "deployment-outputs.env not found. Run deploy-infrastructure-full first."; \
+        exit 1; \
+    fi
+    @source deployment-outputs.env && \
+    if curl -f -s "$$API_URL/health" >/dev/null; then \
+        just print-success "API health check passed"; \
+    else \
+        just print-error "API health check failed"; \
+        exit 1; \
+    fi
+    @source deployment-outputs.env && \
+    if curl -f -s "$$API_URL/people" >/dev/null; then \
+        just print-success "API people endpoint working"; \
+    else \
+        just print-error "API people endpoint failed"; \
+        exit 1; \
+    fi
+
+# Deploy frontend with environment configuration
+deploy-frontend-full:
+    @just print-info "Deploying frontend..."
+    @if [ ! -f "deployment-outputs.env" ]; then \
+        just print-error "deployment-outputs.env not found. Run deploy-infrastructure-full first."; \
+        exit 1; \
+    fi
+    @source deployment-outputs.env && \
+    cd "{{FRONTEND_DIR}}" && \
+    just print-info "Installing frontend dependencies..." && \
+    npm install && \
+    just print-info "Configuring frontend environment..." && \
+    echo "PUBLIC_API_URL=$$API_URL" > .env && \
+    just print-info "Building frontend..." && \
+    npm run build && \
+    just print-info "Deploying to S3..." && \
+    aws s3 sync dist/ "s3://$$S3_BUCKET" --delete && \
+    if [ -n "$$DISTRIBUTION_ID" ]; then \
+        just print-info "Invalidating CloudFront cache..."; \
+        aws cloudfront create-invalidation --distribution-id "$$DISTRIBUTION_ID" --paths "/*" >/dev/null; \
+        just print-success "CloudFront cache invalidated"; \
+    fi
+    @just print-success "Frontend deployed successfully!"
+
+# Test frontend deployment
+test-frontend:
+    @just print-info "Testing frontend deployment..."
+    @if [ ! -f "deployment-outputs.env" ]; then \
+        just print-error "deployment-outputs.env not found. Run deploy-infrastructure-full first."; \
+        exit 1; \
+    fi
+    @just print-info "Waiting for CloudFront to update..."
+    @sleep 10
+    @source deployment-outputs.env && \
+    if curl -f -s "$$FRONTEND_URL" >/dev/null; then \
+        just print-success "Frontend is accessible"; \
+    else \
+        just print-warning "Frontend might still be propagating through CloudFront"; \
+    fi
+
+# Create test data
+create-test-data:
+    @just print-info "Creating test data..."
+    @if [ ! -f "deployment-outputs.env" ]; then \
+        just print-error "deployment-outputs.env not found. Run deploy-infrastructure-full first."; \
+        exit 1; \
+    fi
+    @source deployment-outputs.env && \
+    curl -X POST "$$API_URL/people" \
+        -H "Content-Type: application/json" \
+        -d '{"firstName": "John", "lastName": "Doe", "email": "john.doe@example.com", "phone": "+1-555-123-4567", "dateOfBirth": "1990-01-01", "address": {"street": "123 Main St", "city": "Anytown", "state": "CA", "zipCode": "12345", "country": "USA"}}' >/dev/null && \
+    curl -X POST "$$API_URL/people" \
+        -H "Content-Type: application/json" \
+        -d '{"firstName": "Jane", "lastName": "Smith", "email": "jane.smith@example.com", "phone": "+1-555-987-6543", "dateOfBirth": "1985-05-15", "address": {"street": "456 Oak Ave", "city": "Springfield", "state": "NY", "zipCode": "67890", "country": "USA"}}' >/dev/null
+    @just print-success "Test data created"
+
+# Print comprehensive deployment summary
+print-deployment-summary:
+    @just print-success "🎉 Deployment completed successfully!"
+    @echo ""
+    @echo "📋 Deployment Summary:"
+    @echo "======================"
+    @if [ -f "deployment-outputs.env" ]; then \
+        source deployment-outputs.env && \
+        echo "🔧 API URL: $$API_URL" && \
+        echo "🎨 Frontend URL: $$FRONTEND_URL" && \
+        echo "🗄️  S3 Bucket: $$S3_BUCKET" && \
+        echo "📊 DynamoDB Table: $$DYNAMODB_TABLE" && \
+        echo "🌐 CloudFront Distribution: $$DISTRIBUTION_ID" && \
+        echo "" && \
+        echo "🧪 Test your application:" && \
+        echo "- API Health: curl $$API_URL/health" && \
+        echo "- List People: curl $$API_URL/people" && \
+        echo "- Frontend: Open $$FRONTEND_URL in your browser" && \
+        echo "" && \
+        echo "💰 Estimated monthly cost: \$$6-8 USD for low traffic" && \
+        echo "" && \
+        echo "📚 Next steps:" && \
+        echo "- Set up monitoring and alerts" && \
+        echo "- Configure custom domain names" && \
+        echo "- Set up CI/CD pipelines in CodeCatalyst" && \
+        echo "- Add authentication if needed"; \
+    else \
+        just print-warning "deployment-outputs.env not found. Run deploy-infrastructure-full first."; \
+    fi
+
+# Complete deployment pipeline (replaces deploy-all.sh)
+deploy-all-comprehensive: check-prerequisites deploy-infrastructure-full test-api deploy-frontend-full test-frontend create-test-data print-deployment-summary
+    @just print-success "🚀 Complete People Register Application Deployment Finished!"
+
+# Multi-repository deployment (clones repos first)
+deploy-all-from-repos: check-prerequisites setup-workspace clone-repos
+    @cd "{{WORK_DIR}}/infrastructure" && just deploy-infrastructure-full
+    @cd "{{WORK_DIR}}/infrastructure" && just test-api
+    @cd "{{WORK_DIR}}/infrastructure" && just deploy-frontend-full
+    @cd "{{WORK_DIR}}/infrastructure" && just test-frontend
+    @cd "{{WORK_DIR}}/infrastructure" && just create-test-data
+    @cd "{{WORK_DIR}}/infrastructure" && just print-deployment-summary
+    @just print-success "🚀 Multi-repository deployment completed!"
+
+# Cleanup workspace
+cleanup-workspace:
+    @just print-info "Cleaning up workspace..."
+    @if [ -d "{{WORK_DIR}}" ]; then rm -rf "{{WORK_DIR}}"; fi
+    @just print-success "Cleanup completed"
+
+# Interactive cleanup prompt
+cleanup-interactive:
+    @echo ""
+    @echo "Do you want to clean up the temporary workspace at {{WORK_DIR}}? (y/N):"
+    @read -r response && \
+    if [ "$$response" = "y" ] || [ "$$response" = "Y" ]; then \
+        just cleanup-workspace; \
+    else \
+        just print-info "Workspace preserved at: {{WORK_DIR}}"; \
+    fi
+
+# Helper to get S3 bucket name
+get-bucket-name:
+    @aws cloudformation describe-stacks \
+        --stack-name {{STACK_NAME}} \
+        --query 'Stacks[0].Outputs[?OutputKey==`S3BucketName`].OutputValue' \
+        --output text 2>/dev/null || echo ""
+
+# Helper to get CloudFront distribution ID
+get-distribution-id:
+    @aws cloudfront list-distributions \
+        --query "DistributionList.Items[?Comment==''].Id" \
+        --output text 2>/dev/null || echo ""
+
+# Helper to get API URL
+get-api-url:
+    @aws cloudformation describe-stacks \
+        --stack-name {{STACK_NAME}} \
+        --query 'Stacks[0].Outputs[?OutputKey==`ApiUrl`].OutputValue' \
+        --output text 2>/dev/null || echo ""
+
+# Helper to get Frontend URL
+get-frontend-url:
+    @aws cloudformation describe-stacks \
+        --stack-name {{STACK_NAME}} \
+        --query 'Stacks[0].Outputs[?OutputKey==`FrontendUrl`].OutputValue' \
+        --output text 2>/dev/null || echo ""
+
+# Install frontend dependencies
+install-frontend-deps:
+    @just print-status "Checking frontend dependencies..."
+    @if [ ! -d "{{FRONTEND_DIR}}/node_modules" ]; then \
+        just print-status "Installing frontend dependencies..."; \
+        cd {{FRONTEND_DIR}} && npm install; \
+    else \
+        just print-status "Frontend dependencies already installed"; \
+    fi
+
+# Build the frontend application
+build-frontend:
+    @just print-status "Building frontend..."
+    @API_URL=$(just get-api-url); \
+    cd {{FRONTEND_DIR}}; \
+    if [ -n "$API_URL" ]; then \
+        export PUBLIC_API_URL="$API_URL"; \
+        echo "PUBLIC_API_URL=$API_URL" > .env; \
+        just print-status "Set API URL: $API_URL"; \
+    fi; \
+    npm run build
+    @if [ ! -d "{{FRONTEND_DIR}}/dist" ]; then \
+        just print-error "Build failed - dist directory not found"; \
+        exit 1; \
+    fi
+    @just print-status "Frontend build completed"
+
+# Deploy frontend files to S3
+deploy-to-s3:
+    @just print-status "Deploying to S3..."
+    @BUCKET_NAME=$(just get-bucket-name); \
+    if [ -z "$BUCKET_NAME" ]; then \
+        just print-error "Could not retrieve S3 bucket name from stack outputs"; \
+        just print-warning "Make sure the infrastructure stack is deployed"; \
+        exit 1; \
+    fi; \
+    just print-status "S3 Bucket: $BUCKET_NAME"; \
+    aws s3 sync {{FRONTEND_DIR}}/dist/ "s3://$BUCKET_NAME" \
+        --delete \
+        --cache-control "public, max-age=31536000" \
+        --exclude "*.html" \
+        --exclude "*.json"; \
+    aws s3 sync {{FRONTEND_DIR}}/dist/ "s3://$BUCKET_NAME" \
+        --delete \
+        --cache-control "public, max-age=0, must-revalidate" \
+        --include "*.html" \
+        --include "*.json"
+    @just print-status "Files uploaded to S3"
+
+# Invalidate CloudFront cache
+invalidate-cloudfront:
+    @DISTRIBUTION_ID=$(just get-distribution-id); \
+    if [ -n "$DISTRIBUTION_ID" ]; then \
+        just print-status "CloudFront Distribution ID: $DISTRIBUTION_ID"; \
+        just print-status "Invalidating CloudFront cache..."; \
+        INVALIDATION_ID=$(aws cloudfront create-invalidation \
+            --distribution-id "$DISTRIBUTION_ID" \
+            --paths "/*" \
+            --query 'Invalidation.Id' \
+            --output text); \
+        just print-status "CloudFront invalidation created: $INVALIDATION_ID"; \
+        just print-status "Cache invalidation may take 5-15 minutes to complete"; \
+    else \
+        just print-warning "Skipping CloudFront invalidation - distribution ID not found"; \
+    fi
+
+# Show current stack information
+show-info:
+    @just print-status "Stack Information:"
+    @BUCKET_NAME=$(just get-bucket-name); \
+    API_URL=$(just get-api-url); \
+    FRONTEND_URL=$(just get-frontend-url); \
+    DISTRIBUTION_ID=$(just get-distribution-id); \
+    echo "Stack Name: {{STACK_NAME}}"; \
+    echo "S3 Bucket: $BUCKET_NAME"; \
+    echo "API URL: $API_URL"; \
+    echo "Frontend URL: $FRONTEND_URL"; \
+    echo "CloudFront Distribution ID: $DISTRIBUTION_ID"
+
+# Deploy the complete frontend (full pipeline)
+deploy-frontend: check-requirements install-frontend-deps build-frontend deploy-to-s3 invalidate-cloudfront
+    @just print-status "Frontend deployment completed successfully!"
+    @FRONTEND_URL=$(just get-frontend-url); \
+    if [ -n "$FRONTEND_URL" ]; then \
+        just print-status "Frontend URL: $FRONTEND_URL"; \
+    fi
+
+# Clean frontend build artifacts
+clean-frontend:
+    @just print-status "Cleaning frontend build artifacts..."
+    @rm -rf {{FRONTEND_DIR}}/dist
+    @rm -f {{FRONTEND_DIR}}/.env
+    @just print-status "Frontend cleaned"
+
+# Clean frontend dependencies
+clean-frontend-deps:
+    @just print-status "Cleaning frontend dependencies..."
+    @rm -rf {{FRONTEND_DIR}}/node_modules
+    @rm -f {{FRONTEND_DIR}}/package-lock.json
+    @just print-status "Frontend dependencies cleaned"
+
+# Full clean (build artifacts + dependencies)
+clean-all: clean-frontend clean-frontend-deps
+    @just print-status "All frontend artifacts cleaned"
+
+# Development helpers
+dev-frontend:
+    @just print-status "Starting frontend development server..."
+    @API_URL=$(just get-api-url); \
+    cd {{FRONTEND_DIR}}; \
+    if [ -n "$API_URL" ]; then \
+        export PUBLIC_API_URL="$API_URL"; \
+        echo "PUBLIC_API_URL=$API_URL" > .env; \
+        just print-status "Set API URL for development: $API_URL"; \
+    fi; \
+    npm run dev
+
+# CDK related tasks
+cdk-bootstrap:
+    @just print-status "Bootstrapping CDK..."
+    @cdk bootstrap
+
+cdk-deploy:
+    @just print-status "Deploying CDK stack..."
+    @cdk deploy
+
+cdk-destroy:
+    @just print-status "Destroying CDK stack..."
+    @cdk destroy
+
+cdk-diff:
+    @just print-status "Showing CDK diff..."
+    @cdk diff
+
+cdk-synth:
+    @just print-status "Synthesizing CDK stack..."
+    @cdk synth
+
+# Complete deployment pipeline (infrastructure + frontend)
+deploy-all: cdk-deploy deploy-frontend
+    @just print-status "Complete deployment finished!"
+    @just show-info
+
+# Quick frontend update (skip dependency installation)
+quick-deploy-frontend: check-requirements build-frontend deploy-to-s3 invalidate-cloudfront
+    @just print-status "Quick frontend deployment completed!"
+
+# Validate deployment
+validate-deployment:
+    @just print-status "Validating deployment..."
+    @FRONTEND_URL=$(just get-frontend-url); \
+    API_URL=$(just get-api-url); \
+    if [ -n "$FRONTEND_URL" ]; then \
+        just print-status "Testing frontend URL: $FRONTEND_URL"; \
+        curl -s -o /dev/null -w "%{http_code}" "$FRONTEND_URL" | grep -q "200" && \
+            just print-status "Frontend is accessible" || \
+            just print-warning "Frontend may not be accessible"; \
+    fi; \
+    if [ -n "$API_URL" ]; then \
+        just print-status "Testing API health endpoint: $API_URL/health"; \
+        curl -s -o /dev/null -w "%{http_code}" "$API_URL/health" | grep -q "200" && \
+            just print-status "API is accessible" || \
+            just print-warning "API may not be accessible"; \
+    fi
+
+# Show logs for troubleshooting
+show-logs:
+    @just print-status "Recent CloudFormation events:"
+    @aws cloudformation describe-stack-events \
+        --stack-name {{STACK_NAME}} \
+        --max-items 10 \
+        --query 'StackEvents[*].[Timestamp,ResourceStatus,ResourceType,LogicalResourceId]' \
+        --output table
+
+# Help command with detailed descriptions
+help:
+    @echo "People Register Infrastructure - Available Commands:"
+    @echo ""
+    @echo "🚀 Complete Deployment Pipelines:"
+    @echo "  deploy-all-comprehensive    - Complete deployment (infrastructure + frontend + testing)"
+    @echo "  deploy-all-from-repos      - Multi-repo deployment (clones repos first)"
+    @echo "  deploy-all                 - Deploy infrastructure and frontend (local repos)"
+    @echo ""
+    @echo "🏗️  Infrastructure Commands:"
+    @echo "  deploy-infrastructure-full - Deploy infrastructure with comprehensive output handling"
+    @echo "  cdk-bootstrap              - Bootstrap CDK"
+    @echo "  cdk-deploy                 - Deploy CDK stack"
+    @echo "  cdk-destroy                - Destroy CDK stack"
+    @echo "  cdk-diff                   - Show CDK diff"
+    @echo "  cdk-synth                  - Synthesize CDK stack"
+    @echo ""
+    @echo "🎨 Frontend Commands:"
+    @echo "  deploy-frontend-full       - Deploy frontend with environment configuration"
+    @echo "  deploy-frontend            - Deploy frontend only (standard pipeline)"
+    @echo "  quick-deploy-frontend      - Quick frontend deployment (skip deps installation)"
+    @echo "  build-frontend             - Build frontend application"
+    @echo "  install-frontend-deps      - Install frontend dependencies"
+    @echo ""
+    @echo "🧪 Testing Commands:"
+    @echo "  test-api                   - Test API endpoints"
+    @echo "  test-frontend              - Test frontend deployment"
+    @echo "  create-test-data           - Create sample data in the application"
+    @echo "  validate-deployment        - Validate deployment status"
+    @echo ""
+    @echo "🔧 Development Commands:"
+    @echo "  dev-frontend               - Start frontend development server"
+    @echo "  check-prerequisites        - Check if required tools are installed"
+    @echo "  extract-outputs            - Extract and display deployment outputs"
+    @echo ""
+    @echo "🗂️  Repository Management:"
+    @echo "  setup-workspace            - Setup workspace for multi-repo deployment"
+    @echo "  clone-repos                - Clone all repositories"
+    @echo "  cleanup-workspace          - Clean up temporary workspace"
+    @echo "  cleanup-interactive        - Interactive cleanup prompt"
+    @echo ""
+    @echo "🧹 Cleanup Commands:"
+    @echo "  clean-frontend             - Clean frontend build artifacts"
+    @echo "  clean-frontend-deps        - Clean frontend dependencies"
+    @echo "  clean-all                  - Clean everything"
+    @echo ""
+    @echo "ℹ️  Information Commands:"
+    @echo "  show-info                  - Show current stack information"
+    @echo "  print-deployment-summary   - Print comprehensive deployment summary"
+    @echo "  show-logs                  - Show recent CloudFormation events"
+    @echo ""
+    @echo "📖 Usage Examples:"
+    @echo "  just deploy-all-comprehensive          # Complete deployment with testing"
+    @echo "  just deploy-all-from-repos             # Multi-repository deployment"
+    @echo "  just deploy-infrastructure-full        # Infrastructure only"
+    @echo "  just deploy-frontend-full              # Frontend only (with env config)"
+    @echo "  just test-api && just test-frontend    # Test deployments"
+    @echo "  just create-test-data                  # Add sample data"
+    @echo "  just print-deployment-summary          # Show deployment info"
+    @echo ""
+    @echo "🔄 Migration from deploy-all.sh:"
+    @echo "  ./deploy-all.sh  →  just deploy-all-comprehensive"

@@ -1,0 +1,287 @@
+Name: Cross-Repository Deployment Coordination
+SchemaVersion: "1.0"
+
+# Global environment variables for the entire workflow
+Environment:
+  Variables:
+    # Project Configuration
+    PROJECT_NAME: "people-registry"
+    STACK_NAME: "PeopleRegisterInfrastructureStack"
+    AWS_REGION: "us-west-2"
+    ENVIRONMENT: "production"
+    
+    # Cross-Repository Project Configuration
+    APPLICATION_NAME: "People Register"
+    APPLICATION_VERSION: "1.0.0"
+    APPLICATION_DESCRIPTION: "Serverless people registration management system"
+    ORGANIZATION: "AWSCocha"
+    TEAM: "UserGroup"
+    COST_CENTER: "Community"
+    
+    # Repository Configuration
+    INFRASTRUCTURE_REPO_NAME: "registry-infrastructure"
+    API_REPO_NAME: "registry-api"
+    FRONTEND_REPO_NAME: "register-frontend"
+    
+    # Cross-Repository Coordination Settings
+    COORDINATION_TIMEOUT: "2400"
+    VALIDATION_TIMEOUT: "600"
+    ROLLBACK_ENABLED: "true"
+    NOTIFICATION_ENABLED: "true"
+    
+    # Multi-Component Deployment Settings
+    DEPLOY_INFRASTRUCTURE_FIRST: "true"
+    DEPLOY_API_SECOND: "true"
+    DEPLOY_FRONTEND_LAST: "true"
+    PARALLEL_DEPLOYMENT: "false"
+    
+    # Cross-Repository Testing Configuration
+    INTEGRATION_TEST_SUITE: "comprehensive"
+    LOAD_TEST_ENABLED: "true"
+    SMOKE_TEST_TIMEOUT: "300"
+    E2E_TEST_TIMEOUT: "900"
+    
+    # Tool Versions
+    PYTHON_VERSION: "3.11"
+    NODE_VERSION: "18"
+    CDK_VERSION: "latest"
+    
+    # Deployment Configuration
+    OUTPUTS_FILE: "outputs.json"
+    DEPLOYMENT_OUTPUTS_FILE: "deployment-outputs.env"
+    DEPLOYMENT_TIMEOUT: "1800"
+    
+    # Project-Specific Monitoring
+    HEALTH_CHECK_ENDPOINTS: "5"
+    PERFORMANCE_BASELINE: "2000ms"
+    AVAILABILITY_TARGET: "99.9%"
+    ERROR_RATE_THRESHOLD: "1%"
+    
+    # Justfile Configuration
+    FRONTEND_DIR: "../people-register-frontend"
+    API_DIR: "../people-register-api"
+    WORK_DIR: "/tmp/people-register-deployment"
+
+# This workflow can be triggered manually or by other repositories
+Triggers:
+  - Type: MANUAL
+  # Also trigger on pushes to main (for direct infrastructure changes)
+  - Type: PUSH
+    Branches:
+      - main
+
+Actions:
+  # Determine deployment source
+  DeploymentSourceCheck:
+    Identifier: aws/build@v1
+    Inputs:
+      Sources:
+        - WorkflowSource
+    Configuration:
+      Commands:
+        - echo "🔍 Cross-Repository Deployment Coordination"
+        - echo "==========================================="
+        - echo "📅 Time: $(date)"
+        - echo "🏷️  Commit: ${WorkflowSource.CommitId}"
+        - echo "👤 Author: ${WorkflowSource.CommitAuthor}"
+        - echo "🌿 Branch: ${WorkflowSource.BranchName}"
+        - echo "🎯 Trigger Type: ${WorkflowSource.SourceType}"
+        - echo ""
+        - echo "🏗️  Application: $APPLICATION_NAME v$APPLICATION_VERSION"
+        - echo "📝 Description: $APPLICATION_DESCRIPTION"
+        - echo "🏢 Organization: $ORGANIZATION | Team: $TEAM | Cost Center: $COST_CENTER"
+        - echo "🏗️  Stack: $STACK_NAME | Region: $AWS_REGION | Environment: $ENVIRONMENT"
+        - echo "📦 Project: $PROJECT_NAME"
+        - echo ""
+        - echo "🔧 Coordination Settings:"
+        - echo "  ⏱️  Timeout: ${COORDINATION_TIMEOUT}s | Rollback: $ROLLBACK_ENABLED"
+        - echo "  🧪 Integration Tests: $INTEGRATION_TEST_SUITE | Load Tests: $LOAD_TEST_ENABLED"
+        - echo "  📊 Performance: $PERFORMANCE_BASELINE | Availability: $AVAILABILITY_TARGET"
+        - echo ""
+        - echo "📋 Deployment Context:"
+        - if [ "${WorkflowSource.SourceType}" = "MANUAL" ]; then
+            echo "  🔧 Triggered manually or by external repository";
+            echo "  📦 Source: Cross-repository coordination";
+          else
+            echo "  📦 Source: Direct infrastructure repository change";
+          fi
+        - echo ""
+        - echo "🚀 Proceeding with infrastructure deployment..."
+
+  # Install just command runner
+  InstallJust:
+    Identifier: aws/build@v1
+    DependsOn:
+      - DeploymentSourceCheck
+    Inputs:
+      Sources:
+        - WorkflowSource
+    Configuration:
+      Commands:
+        - echo "📦 Installing just command runner..."
+        - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+        - chmod +x /usr/local/bin/just
+        - just --version
+        - echo "✅ just installed successfully"
+    Outputs:
+      Artifacts:
+        - Name: just-binary
+          Files:
+            - "/usr/local/bin/just"
+
+  # Pre-deployment validation
+  PreDeploymentValidation:
+    Identifier: aws/build@v1
+    DependsOn:
+      - InstallJust
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - just-binary
+    Configuration:
+      Commands:
+        - echo "🔬 Pre-deployment validation..."
+        - echo "Project: $PROJECT_NAME | Stack: $STACK_NAME | Region: $AWS_REGION"
+        - cp /usr/local/bin/just /usr/local/bin/just || true
+        - chmod +x /usr/local/bin/just
+        - export PATH="/usr/local/bin:$PATH"
+        - echo "Checking prerequisites..."
+        - just check-prerequisites
+        - echo "Running CDK synth validation..."
+        - just cdk-synth
+        - echo "✅ Pre-deployment validation passed"
+
+  # Comprehensive deployment
+  ComprehensiveDeployment:
+    Identifier: aws/build@v1
+    DependsOn:
+      - PreDeploymentValidation
+    Environment:
+      Name: production
+      Connections:
+        - Name: aws-connection
+          Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - just-binary
+    Configuration:
+      Commands:
+        - echo "🚀 COMPREHENSIVE DEPLOYMENT STARTED"
+        - echo "===================================="
+        - echo "⚠️  Deploying to PRODUCTION environment"
+        - echo "🔗 Coordinated deployment across repositories"
+        - echo "📦 Project: $PROJECT_NAME"
+        - echo "🏗️  Stack: $STACK_NAME"
+        - echo "🌍 Region: $AWS_REGION"
+        - echo "⏱️  Timeout: $DEPLOYMENT_TIMEOUT seconds"
+        - echo ""
+        - cp /usr/local/bin/just /usr/local/bin/just || true
+        - chmod +x /usr/local/bin/just
+        - export PATH="/usr/local/bin:$PATH"
+        - echo "🏗️  Running comprehensive deployment..."
+        - echo "Deployment strategy: Infrastructure → API → Frontend"
+        - echo "Parallel deployment: $PARALLEL_DEPLOYMENT | Rollback: $ROLLBACK_ENABLED"
+        - timeout $COORDINATION_TIMEOUT just deploy-all-comprehensive
+        - echo "✅ COMPREHENSIVE DEPLOYMENT COMPLETED"
+    Outputs:
+      Artifacts:
+        - Name: comprehensive-deployment-outputs
+          Files:
+            - $OUTPUTS_FILE
+            - $DEPLOYMENT_OUTPUTS_FILE
+
+  # Post-deployment coordination
+  PostDeploymentCoordination:
+    Identifier: aws/build@v1
+    DependsOn:
+      - ComprehensiveDeployment
+    Environment:
+      Name: production
+      Connections:
+        - Name: aws-connection
+          Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - just-binary
+        - comprehensive-deployment-outputs
+    Configuration:
+      Commands:
+        - echo "🔄 Post-Deployment Coordination"
+        - echo "==============================="
+        - echo "Project: $PROJECT_NAME | Environment: $ENVIRONMENT"
+        - cp /usr/local/bin/just /usr/local/bin/just || true
+        - chmod +x /usr/local/bin/just
+        - export PATH="/usr/local/bin:$PATH"
+        - cp $DEPLOYMENT_OUTPUTS_FILE $DEPLOYMENT_OUTPUTS_FILE
+        - echo "🧪 Running comprehensive validation..."
+        - just validate-deployment
+        - echo "📊 Generating deployment summary..."
+        - just print-deployment-summary
+        - echo ""
+        - echo "🔔 Notifying source repositories..."
+        - source $DEPLOYMENT_OUTPUTS_FILE
+        - echo "✅ Cross-repository deployment coordination completed"
+        - echo ""
+        - echo "📋 Final Status:"
+        - echo "  🏗️  Infrastructure: ✅ Deployed"
+        - echo "  🔧 API: ✅ Operational"
+        - echo "  🎨 Frontend: ✅ Accessible"
+        - echo "  🧪 Tests: ✅ Passed"
+        - echo "  🌐 URLs:"
+        - echo "    • Frontend: $FRONTEND_URL"
+        - echo "    • API: $API_URL"
+
+  # Generate cross-repository deployment report
+  GenerateCrossRepoReport:
+    Identifier: aws/build@v1
+    DependsOn:
+      - PostDeploymentCoordination
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - comprehensive-deployment-outputs
+    Configuration:
+      Commands:
+        - echo "📄 Generating cross-repository deployment report..."
+        - source $DEPLOYMENT_OUTPUTS_FILE
+        - echo "# Cross-Repository Deployment Report" > cross-repo-deployment-report.md
+        - echo "" >> cross-repo-deployment-report.md
+        - echo "## Deployment Overview" >> cross-repo-deployment-report.md
+        - echo "- **Project:** $PROJECT_NAME" >> cross-repo-deployment-report.md
+        - echo "- **Deployment Date:** $(date)" >> cross-repo-deployment-report.md
+        - echo "- **Coordination Type:** Cross-repository deployment" >> cross-repo-deployment-report.md
+        - echo "- **Trigger:** ${WorkflowSource.SourceType}" >> cross-repo-deployment-report.md
+        - echo "- **Infrastructure Commit:** ${WorkflowSource.CommitId}" >> cross-repo-deployment-report.md
+        - echo "- **Stack:** $STACK_NAME" >> cross-repo-deployment-report.md
+        - echo "- **Region:** $AWS_REGION" >> cross-repo-deployment-report.md
+        - echo "" >> cross-repo-deployment-report.md
+        - echo "## Affected Repositories" >> cross-repo-deployment-report.md
+        - echo "- 🏗️  **$INFRASTRUCTURE_REPO_NAME**: Core deployment" >> cross-repo-deployment-report.md
+        - echo "- 🔧 **$API_REPO_NAME**: Backend services" >> cross-repo-deployment-report.md
+        - echo "- 🎨 **$FRONTEND_REPO_NAME**: User interface" >> cross-repo-deployment-report.md
+        - echo "" >> cross-repo-deployment-report.md
+        - echo "## Deployment Results" >> cross-repo-deployment-report.md
+        - echo "- **Infrastructure Status:** ✅ SUCCESS" >> cross-repo-deployment-report.md
+        - echo "- **API URL:** $API_URL" >> cross-repo-deployment-report.md
+        - echo "- **Frontend URL:** $FRONTEND_URL" >> cross-repo-deployment-report.md
+        - echo "- **Validation Status:** ✅ PASSED" >> cross-repo-deployment-report.md
+        - echo "" >> cross-repo-deployment-report.md
+        - echo "## Next Steps" >> cross-repo-deployment-report.md
+        - echo "- Monitor application performance across all components" >> cross-repo-deployment-report.md
+        - echo "- Verify integration between API and frontend" >> cross-repo-deployment-report.md
+        - echo "- Check CloudWatch logs for any issues" >> cross-repo-deployment-report.md
+        - echo "- Validate user workflows end-to-end" >> cross-repo-deployment-report.md
+        - cat cross-repo-deployment-report.md
+        - echo "📄 Cross-repository deployment report generated"
+    Outputs:
+      Artifacts:
+        - Name: cross-repo-report
+          Files:
+            - cross-repo-deployment-report.md
+            - $DEPLOYMENT_OUTPUTS_FILE

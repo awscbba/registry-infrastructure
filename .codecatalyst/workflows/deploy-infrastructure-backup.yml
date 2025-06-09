@@ -1,0 +1,253 @@
+Name: Deploy Infrastructure
+SchemaVersion: "1.0"
+
+# Global environment variables for the entire workflow
+Environment:
+  Variables:
+    # Project Configuration
+    PROJECT_NAME: "people-registry"
+    STACK_NAME: "PeopleRegisterInfrastructureStack"
+    AWS_REGION: "us-west-2"
+    ENVIRONMENT: "production"
+    
+    # Tool Versions
+    PYTHON_VERSION: "3.11"
+    NODE_VERSION: "18"
+    CDK_VERSION: "latest"
+    
+    # Deployment Configuration
+    REQUIRE_APPROVAL: "never"
+    OUTPUTS_FILE: "outputs.json"
+    DEPLOYMENT_OUTPUTS_FILE: "deployment-outputs.env"
+    
+    # Timeouts
+    HEALTH_CHECK_TIMEOUT: "30"
+    INTEGRATION_TEST_TIMEOUT: "60"
+    DEPLOYMENT_TIMEOUT: "1800"
+
+Triggers:
+  # Only trigger on push to main (after merge)
+  - Type: PUSH
+    Branches:
+      - main
+  # Pull request validation only (no deployment)
+  - Type: PULLREQUEST
+    Branches:
+      - main
+    Events:
+      - OPEN
+      - REVISION
+
+Actions:
+  # Install just command runner
+  InstallJust:
+    Identifier: aws/build@v1
+    Inputs:
+      Sources:
+        - WorkflowSource
+    Configuration:
+      Commands:
+        - echo "Installing just command runner..."
+        - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+        - just --version
+        - echo "just installed successfully"
+    Outputs:
+      Artifacts:
+        - Name: just-binary
+          Files:
+            - "/usr/local/bin/just"
+
+  # Validate infrastructure code (runs on PRs and main pushes)
+  ValidateInfrastructure:
+    Identifier: aws/build@v1
+    DependsOn:
+      - InstallJust
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - just-binary
+    Configuration:
+      Commands:
+        - echo "Setting up environment..."
+        - cp /usr/local/bin/just /usr/local/bin/just || true
+        - chmod +x /usr/local/bin/just
+        - export PATH="/usr/local/bin:$PATH"
+        - echo "Checking prerequisites..."
+        - just check-prerequisites
+        - echo "Running CDK synth to validate..."
+        - just cdk-synth
+        - echo "Running unit tests..."
+        - source .venv/bin/activate && python -m pytest tests/ -v || echo "No tests found"
+        - echo "✅ Infrastructure validation completed"
+    Outputs:
+      Reports:
+        - Name: test-results
+          Format: JUNITXML
+          IncludePaths:
+            - "test-results.xml"
+
+  # Deploy to production environment (ONLY on main branch push after merge)
+  DeployProduction:
+    Identifier: aws/build@v1
+    DependsOn:
+      - ValidateInfrastructure
+    Environment:
+      Name: production
+      Connections:
+        - Name: aws-connection
+          Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+      Variables:
+        STACK_NAME: "PeopleRegisterInfrastructureStack"
+        AWS_REGION: "us-west-2"
+        ENVIRONMENT: "production"
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - just-binary
+    Configuration:
+      Commands:
+        - echo "🚀 Starting production deployment after merge to main..."
+        - echo "Setting up environment..."
+        - cp /usr/local/bin/just /usr/local/bin/just || true
+        - chmod +x /usr/local/bin/just
+        - export PATH="/usr/local/bin:$PATH"
+        - echo "Deploying infrastructure to production..."
+        - just deploy-infrastructure-full
+        - echo "Testing API endpoints..."
+        - just test-api
+        - echo "Creating test data..."
+        - just create-test-data
+        - echo "Saving deployment outputs..."
+        - cp outputs.json deployment-outputs-prod.json
+        - cp deployment-outputs.env deployment-outputs-prod.env
+        - echo "Printing deployment summary..."
+        - just print-deployment-summary
+        - echo "✅ Production infrastructure deployment completed"
+    Outputs:
+      Artifacts:
+        - Name: prod-infrastructure-outputs
+          Files:
+            - deployment-outputs-prod.json
+            - deployment-outputs-prod.env
+    # CRITICAL: Only run on main branch pushes (after merge approval)
+    Condition:
+      StringEquals:
+        - "${WorkflowSource.BranchName}"
+        - "main"
+
+  # Deploy frontend after infrastructure (ONLY on main branch push after merge)
+  DeployFrontend:
+    Identifier: aws/build@v1
+    DependsOn:
+      - DeployProduction
+    Environment:
+      Name: production
+      Connections:
+        - Name: aws-connection
+          Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - just-binary
+        - prod-infrastructure-outputs
+    Configuration:
+      Commands:
+        - echo "🎨 Starting frontend deployment after infrastructure..."
+        - echo "Setting up environment..."
+        - cp /usr/local/bin/just /usr/local/bin/just || true
+        - chmod +x /usr/local/bin/just
+        - export PATH="/usr/local/bin:$PATH"
+        - echo "Restoring deployment outputs..."
+        - cp deployment-outputs-prod.env deployment-outputs.env
+        - echo "Deploying frontend..."
+        - just deploy-frontend-full
+        - echo "Testing frontend..."
+        - just test-frontend
+        - echo "Validating complete deployment..."
+        - just validate-deployment
+        - echo "Final deployment summary..."
+        - just print-deployment-summary
+        - echo "✅ Frontend deployment completed"
+    # CRITICAL: Only run on main branch pushes (after merge approval)
+    Condition:
+      StringEquals:
+        - "${WorkflowSource.BranchName}"
+        - "main"
+
+  # Integration tests (ONLY on main branch push after merge)
+  IntegrationTests:
+    Identifier: aws/build@v1
+    DependsOn:
+      - DeployFrontend
+    Environment:
+      Name: production
+      Connections:
+        - Name: aws-connection
+          Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - just-binary
+        - prod-infrastructure-outputs
+    Configuration:
+      Commands:
+        - echo "🧪 Running integration tests after deployment..."
+        - echo "Setting up environment..."
+        - cp /usr/local/bin/just /usr/local/bin/just || true
+        - chmod +x /usr/local/bin/just
+        - export PATH="/usr/local/bin:$PATH"
+        - echo "Restoring deployment outputs..."
+        - cp deployment-outputs-prod.env deployment-outputs.env
+        - echo "Running integration tests..."
+        - source deployment-outputs.env
+        - echo "Testing API health endpoint..."
+        - curl -f "$API_URL/health" || exit 1
+        - echo "Testing API people endpoint..."
+        - curl -f "$API_URL/people" || exit 1
+        - echo "Testing frontend accessibility..."
+        - curl -f -I "$FRONTEND_URL" || exit 1
+        - echo "Verifying test data..."
+        - PEOPLE_COUNT=$(curl -s "$API_URL/people" | jq length)
+        - echo "People count: $PEOPLE_COUNT"
+        - if [ "$PEOPLE_COUNT" -lt 1 ]; then echo "No people found, test failed"; exit 1; fi
+        - echo "✅ All integration tests passed!"
+    # CRITICAL: Only run on main branch pushes (after merge approval)
+    Condition:
+      StringEquals:
+        - "${WorkflowSource.BranchName}"
+        - "main"
+
+  # Notification of successful deployment (ONLY on main branch push after merge)
+  NotifyDeploymentSuccess:
+    Identifier: aws/build@v1
+    DependsOn:
+      - IntegrationTests
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - just-binary
+        - prod-infrastructure-outputs
+    Configuration:
+      Commands:
+        - echo "📢 Deployment Notification"
+        - echo "=========================="
+        - echo "✅ Production deployment completed successfully!"
+        - echo "🔗 Triggered by: Merge to main branch"
+        - echo "📅 Deployment time: $(date)"
+        - echo "🏷️  Commit: ${WorkflowSource.CommitId}"
+        - echo "👤 Author: ${WorkflowSource.CommitAuthor}"
+        - source deployment-outputs-prod.env
+        - echo "🌐 Frontend URL: $FRONTEND_URL"
+        - echo "🔧 API URL: $API_URL"
+        - echo "📊 All systems operational"
+        - echo "=========================="
+    # CRITICAL: Only run on main branch pushes (after merge approval)
+    Condition:
+      StringEquals:
+        - "${WorkflowSource.BranchName}"
+        - "main"

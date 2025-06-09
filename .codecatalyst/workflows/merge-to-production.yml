@@ -1,0 +1,251 @@
+Name: Merge to Production Deployment
+SchemaVersion: "1.0"
+
+# This workflow ONLY triggers on pushes to main branch (after merge approval)
+Triggers:
+  - Type: PUSH
+    Branches:
+      - main
+
+Actions:
+  # Pre-deployment validation
+  PreDeploymentCheck:
+    Identifier: aws/build@v1
+    Inputs:
+      Sources:
+        - WorkflowSource
+    Configuration:
+      Commands:
+        - echo "🔍 Pre-Deployment Validation"
+        - echo "============================="
+        - echo "✅ Triggered by merge to main branch"
+        - echo "📅 Deployment time: $(date)"
+        - echo "🏷️  Commit: ${WorkflowSource.CommitId}"
+        - echo "👤 Author: ${WorkflowSource.CommitAuthor}"
+        - echo "📝 Commit message: ${WorkflowSource.CommitMessage}"
+        - echo ""
+        - echo "🚀 Starting production deployment pipeline..."
+        - echo "============================="
+
+  # Install just command runner
+  InstallJust:
+    Identifier: aws/build@v1
+    DependsOn:
+      - PreDeploymentCheck
+    Inputs:
+      Sources:
+        - WorkflowSource
+    Configuration:
+      Commands:
+        - echo "📦 Installing just command runner..."
+        - curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+        - chmod +x /usr/local/bin/just
+        - just --version
+        - echo "✅ just installed successfully"
+    Outputs:
+      Artifacts:
+        - Name: just-binary
+          Files:
+            - "/usr/local/bin/just"
+
+  # Final validation before production deployment
+  FinalValidation:
+    Identifier: aws/build@v1
+    DependsOn:
+      - InstallJust
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - just-binary
+    Configuration:
+      Commands:
+        - echo "🔬 Final validation before production deployment..."
+        - cp /usr/local/bin/just /usr/local/bin/just || true
+        - chmod +x /usr/local/bin/just
+        - export PATH="/usr/local/bin:$PATH"
+        - echo "Checking prerequisites..."
+        - just check-prerequisites
+        - echo "Running CDK synth validation..."
+        - just cdk-synth
+        - echo "✅ Final validation passed - proceeding with production deployment"
+
+  # Production deployment
+  ProductionDeployment:
+    Identifier: aws/build@v1
+    DependsOn:
+      - FinalValidation
+    Environment:
+      Name: production
+      Connections:
+        - Name: aws-connection
+          Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - just-binary
+    Configuration:
+      Commands:
+        - echo "🚀 PRODUCTION DEPLOYMENT STARTED"
+        - echo "================================="
+        - echo "⚠️  Deploying to PRODUCTION environment"
+        - echo "🔒 This deployment was triggered by an approved merge to main"
+        - echo ""
+        - cp /usr/local/bin/just /usr/local/bin/just || true
+        - chmod +x /usr/local/bin/just
+        - export PATH="/usr/local/bin:$PATH"
+        - echo "🏗️  Deploying infrastructure..."
+        - just deploy-infrastructure-full
+        - echo "🧪 Testing API endpoints..."
+        - just test-api
+        - echo "🎨 Deploying frontend..."
+        - just deploy-frontend-full
+        - echo "🌐 Testing frontend..."
+        - just test-frontend
+        - echo "📊 Creating test data..."
+        - just create-test-data
+        - echo "✅ PRODUCTION DEPLOYMENT COMPLETED"
+    Outputs:
+      Artifacts:
+        - Name: production-deployment-outputs
+          Files:
+            - outputs.json
+            - deployment-outputs.env
+
+  # Post-deployment validation
+  PostDeploymentValidation:
+    Identifier: aws/build@v1
+    DependsOn:
+      - ProductionDeployment
+    Environment:
+      Name: production
+      Connections:
+        - Name: aws-connection
+          Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - just-binary
+        - production-deployment-outputs
+    Configuration:
+      Commands:
+        - echo "🔍 Post-Deployment Validation"
+        - echo "============================="
+        - cp /usr/local/bin/just /usr/local/bin/just || true
+        - chmod +x /usr/local/bin/just
+        - export PATH="/usr/local/bin:$PATH"
+        - cp deployment-outputs.env deployment-outputs.env
+        - echo "🧪 Running comprehensive validation..."
+        - just validate-deployment
+        - echo "🏃‍♂️ Running integration tests..."
+        - source deployment-outputs.env
+        - echo "Testing API health endpoint..."
+        - curl -f "$API_URL/health" || exit 1
+        - echo "Testing API people endpoint..."
+        - curl -f "$API_URL/people" || exit 1
+        - echo "Testing frontend accessibility..."
+        - curl -f -I "$FRONTEND_URL" || exit 1
+        - echo "Verifying test data..."
+        - PEOPLE_COUNT=$(curl -s "$API_URL/people" | jq length)
+        - echo "People count: $PEOPLE_COUNT"
+        - if [ "$PEOPLE_COUNT" -lt 1 ]; then echo "❌ No people found, test failed"; exit 1; fi
+        - echo "✅ All post-deployment validations passed!"
+
+  # Deployment success notification
+  DeploymentSuccessNotification:
+    Identifier: aws/build@v1
+    DependsOn:
+      - PostDeploymentValidation
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - production-deployment-outputs
+    Configuration:
+      Commands:
+        - echo "🎉 PRODUCTION DEPLOYMENT SUCCESS"
+        - echo "================================="
+        - echo "✅ Production deployment completed successfully!"
+        - echo ""
+        - echo "📋 Deployment Details:"
+        - echo "  🔗 Triggered by: Approved merge to main branch"
+        - echo "  📅 Deployment time: $(date)"
+        - echo "  🏷️  Commit: ${WorkflowSource.CommitId}"
+        - echo "  👤 Author: ${WorkflowSource.CommitAuthor}"
+        - echo "  📝 Message: ${WorkflowSource.CommitMessage}"
+        - echo ""
+        - source deployment-outputs.env
+        - echo "🌐 Application URLs:"
+        - echo "  🎨 Frontend: $FRONTEND_URL"
+        - echo "  🔧 API: $API_URL"
+        - echo ""
+        - echo "📊 System Status:"
+        - echo "  ✅ Infrastructure: Deployed"
+        - echo "  ✅ API: Operational"
+        - echo "  ✅ Frontend: Accessible"
+        - echo "  ✅ Integration Tests: Passed"
+        - echo ""
+        - echo "🎯 Next Steps:"
+        - echo "  • Monitor application performance"
+        - echo "  • Check CloudWatch logs if needed"
+        - echo "  • Verify user functionality"
+        - echo "================================="
+
+  # Generate deployment report
+  GenerateDeploymentReport:
+    Identifier: aws/build@v1
+    DependsOn:
+      - DeploymentSuccessNotification
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - production-deployment-outputs
+    Configuration:
+      Commands:
+        - echo "📄 Generating deployment report..."
+        - source deployment-outputs.env
+        - echo "# Production Deployment Report" > deployment-report.md
+        - echo "" >> deployment-report.md
+        - echo "## Deployment Summary" >> deployment-report.md
+        - echo "- **Deployment Date:** $(date)" >> deployment-report.md
+        - echo "- **Trigger:** Approved merge to main branch" >> deployment-report.md
+        - echo "- **Commit:** ${WorkflowSource.CommitId}" >> deployment-report.md
+        - echo "- **Author:** ${WorkflowSource.CommitAuthor}" >> deployment-report.md
+        - echo "- **Message:** ${WorkflowSource.CommitMessage}" >> deployment-report.md
+        - echo "" >> deployment-report.md
+        - echo "## Infrastructure Details" >> deployment-report.md
+        - echo "- **Stack Name:** PeopleRegisterInfrastructureStack" >> deployment-report.md
+        - echo "- **API URL:** $API_URL" >> deployment-report.md
+        - echo "- **Frontend URL:** $FRONTEND_URL" >> deployment-report.md
+        - echo "- **S3 Bucket:** $S3_BUCKET" >> deployment-report.md
+        - echo "- **DynamoDB Table:** $DYNAMODB_TABLE" >> deployment-report.md
+        - echo "- **CloudFront Distribution:** $DISTRIBUTION_ID" >> deployment-report.md
+        - echo "" >> deployment-report.md
+        - echo "## Validation Results" >> deployment-report.md
+        - echo "- **API Health Check:** ✅ PASSED" >> deployment-report.md
+        - echo "- **Frontend Accessibility:** ✅ PASSED" >> deployment-report.md
+        - echo "- **Integration Tests:** ✅ PASSED" >> deployment-report.md
+        - echo "- **Test Data Creation:** ✅ PASSED" >> deployment-report.md
+        - echo "" >> deployment-report.md
+        - echo "## Deployment Process" >> deployment-report.md
+        - echo "1. ✅ Pre-deployment validation" >> deployment-report.md
+        - echo "2. ✅ Infrastructure deployment" >> deployment-report.md
+        - echo "3. ✅ API testing" >> deployment-report.md
+        - echo "4. ✅ Frontend deployment" >> deployment-report.md
+        - echo "5. ✅ Frontend testing" >> deployment-report.md
+        - echo "6. ✅ Test data creation" >> deployment-report.md
+        - echo "7. ✅ Post-deployment validation" >> deployment-report.md
+        - echo "8. ✅ Integration testing" >> deployment-report.md
+        - echo "" >> deployment-report.md
+        - echo "## Status: 🎉 SUCCESS" >> deployment-report.md
+        - cat deployment-report.md
+        - echo "📄 Deployment report generated successfully"
+    Outputs:
+      Artifacts:
+        - Name: deployment-report
+          Files:
+            - deployment-report.md
+            - deployment-outputs.env
