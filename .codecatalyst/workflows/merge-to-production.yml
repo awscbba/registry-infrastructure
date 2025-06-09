@@ -1,4 +1,4 @@
-Name: Merge to Production Deployment
+Name: Merge-to-Production-Deployment
 SchemaVersion: "1.0"
 
 # This workflow ONLY triggers on pushes to main branch (after merge approval)

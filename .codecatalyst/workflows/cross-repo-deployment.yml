@@ -1,4 +1,4 @@
-Name: Cross-Repository Deployment Coordination
+Name: Cross-Repository-Deployment
 SchemaVersion: "1.0"
 
 # Global environment variables for the entire workflow

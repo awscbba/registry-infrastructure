@@ -1,4 +1,4 @@
-Name: Deploy Infrastructure
+Name: Deploy-Infrastructure-Backup
 SchemaVersion: "1.0"
 
 # Global environment variables for the entire workflow

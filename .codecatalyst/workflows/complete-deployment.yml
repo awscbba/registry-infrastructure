@@ -1,4 +1,4 @@
-Name: Complete Application Deployment
+Name: Complete-Application-Deployment
 SchemaVersion: "1.0"
 
 # Only trigger on approved merges to main branch

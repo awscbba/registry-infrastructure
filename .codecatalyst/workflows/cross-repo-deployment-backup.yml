@@ -1,4 +1,4 @@
-Name: Cross-Repository Deployment Coordination
+Name: Cross-Repository-Deployment-Backup
 SchemaVersion: "1.0"
 
 # This workflow can be triggered manually or by other repositories
