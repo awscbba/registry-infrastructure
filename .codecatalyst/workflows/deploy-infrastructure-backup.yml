@@ -7,7 +7,7 @@ Environment:
     # Project Configuration
     PROJECT_NAME: "people-registry"
     STACK_NAME: "PeopleRegisterInfrastructureStack"
-    AWS_REGION: "us-west-2"
+    AWS_REGION: "us-east-1"
     ENVIRONMENT: "production"
     
     # Tool Versions
@@ -99,7 +99,7 @@ Actions:
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
       Variables:
         STACK_NAME: "PeopleRegisterInfrastructureStack"
-        AWS_REGION: "us-west-2"
+        AWS_REGION: "us-east-1"
         ENVIRONMENT: "production"
     Inputs:
       Sources:
