@@ -1,0 +1,41 @@
+Name: Simple_Test
+SchemaVersion: "1.0"
+
+Triggers:
+  - Type: PUSH
+    Branches:
+      - main
+
+Actions:
+  BasicTest:
+    Identifier: aws/build@v1
+    Inputs:
+      Sources:
+        - WorkflowSource
+    Configuration:
+      Steps:
+        - Run: |
+            echo "🧪 Simple Test Workflow"
+            echo "======================="
+            
+            echo "Step 1: Basic commands"
+            echo "Current directory: $(pwd)"
+            echo "Current user: $(whoami)"
+            echo "Date: $(date)"
+            
+            echo "Step 2: Install just"
+            curl --proto "=https" --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+            /usr/local/bin/just --version
+            
+            echo "Step 3: Python setup"
+            python3 --version
+            python3 -m venv .venv
+            source .venv/bin/activate
+            pip install -r requirements.txt
+            
+            echo "Step 4: CDK test"
+            npm install -g aws-cdk
+            cdk --version
+            cdk synth --quiet
+            
+            echo "✅ Simple test completed successfully"
