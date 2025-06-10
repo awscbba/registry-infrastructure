@@ -1,7 +1,6 @@
 Name: Deploy-Infrastructure
 SchemaVersion: "1.0"
 
-# Only trigger on push to main (after merge) and PR validation
 Triggers:
   - Type: PUSH
     Branches:
@@ -14,25 +13,24 @@ Triggers:
       - REVISION
 
 Actions:
-  # Install just command runner
   InstallJust:
     Identifier: aws/build@v1
     Inputs:
       Sources:
         - WorkflowSource
     Configuration:
-      Commands:
-        - 'echo "Installing just command runner..."'
-        - 'curl --proto "=https" --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin'
-        - 'just --version'
-        - 'echo "✅ just installed successfully"'
+      Steps:
+        - Run: |
+            echo "Installing just command runner..."
+            curl --proto "=https" --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+            just --version
+            echo "✅ just installed successfully"
     Outputs:
       Artifacts:
         - Name: just-binary
           Files:
             - "/usr/local/bin/just"
 
-  # Validate infrastructure code (runs on PRs and main pushes)
   ValidateInfrastructure:
     Identifier: aws/build@v1
     DependsOn:
@@ -43,42 +41,42 @@ Actions:
       Artifacts:
         - just-binary
     Configuration:
-      Commands:
-        - 'echo "Setting up environment..."'
-        - 'cp /usr/local/bin/just /usr/local/bin/just || true'
-        - 'chmod +x /usr/local/bin/just'
-        - 'export PATH="/usr/local/bin:$PATH"'
-        - 'export PROJECT_NAME="people-registry"'
-        - 'export STACK_NAME="PeopleRegisterInfrastructureStack"'
-        - 'export AWS_REGION="us-east-1"'
-        - 'export ENVIRONMENT="production"'
-        - 'export APPLICATION_NAME="People Register"'
-        - 'export APPLICATION_VERSION="1.0.0"'
-        - 'export ORGANIZATION="AWSCocha"'
-        - 'export LAMBDA_RUNTIME="python3.11"'
-        - 'export LAMBDA_MEMORY="256"'
-        - 'export DYNAMODB_BILLING_MODE="PAY_PER_REQUEST"'
-        - 'echo "🔍 Validating infrastructure for $APPLICATION_NAME ($PROJECT_NAME)"'
-        - 'echo "Stack: $STACK_NAME | Region: $AWS_REGION | Environment: $ENVIRONMENT"'
-        - 'echo "Version: $APPLICATION_VERSION | Organization: $ORGANIZATION"'
-        - 'echo "DynamoDB: $DYNAMODB_BILLING_MODE | Lambda: $LAMBDA_RUNTIME ($LAMBDA_MEMORY MB)"'
-        - 'echo "Checking prerequisites..."'
-        - 'just check-prerequisites'
-        - 'echo "Running CDK synth to validate..."'
-        - 'just cdk-synth'
-        - 'echo "Running unit tests..."'
-        - 'source .venv/bin/activate && python -m pytest tests/ -v || echo "No tests found"'
-        - 'echo "✅ Infrastructure validation completed"'
+      Steps:
+        - Run: |
+            echo "Setting up environment..."
+            cp /usr/local/bin/just /usr/local/bin/just || true
+            chmod +x /usr/local/bin/just
+            export PATH="/usr/local/bin:$PATH"
+            export PROJECT_NAME="people-registry"
+            export STACK_NAME="PeopleRegisterInfrastructureStack"
+            export AWS_REGION="us-east-1"
+            export ENVIRONMENT="production"
+            export APPLICATION_NAME="People-Register"
+            export APPLICATION_VERSION="1.0.0"
+            export ORGANIZATION="AWSCocha"
+            export LAMBDA_RUNTIME="python3.11"
+            export LAMBDA_MEMORY="256"
+            export DYNAMODB_BILLING_MODE="PAY_PER_REQUEST"
+            echo "🔍 Validating infrastructure for $APPLICATION_NAME ($PROJECT_NAME)"
+            echo "Stack: $STACK_NAME | Region: $AWS_REGION | Environment: $ENVIRONMENT"
+            echo "Version: $APPLICATION_VERSION | Organization: $ORGANIZATION"
+            echo "DynamoDB: $DYNAMODB_BILLING_MODE | Lambda: $LAMBDA_RUNTIME ($LAMBDA_MEMORY MB)"
+            echo "Checking prerequisites..."
+            just check-prerequisites
+            echo "Running CDK synth to validate..."
+            just cdk-synth
+            echo "Running unit tests..."
+            source .venv/bin/activate && python -m pytest tests/ -v || echo "No tests found"
+            echo "✅ Infrastructure validation completed"
 
-  # Deploy to production environment (ONLY on main branch push after merge)
   DeployProduction:
     Identifier: aws/build@v1
     DependsOn:
       - ValidateInfrastructure
     Environment:
-      Name: production
+      Name: Production
       Connections:
-        - Name: 142728997126
+        - Name: "142728997126"
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
     Inputs:
       Sources:
@@ -86,46 +84,47 @@ Actions:
       Artifacts:
         - just-binary
     Configuration:
-      Commands:
-        - 'echo "🚀 Starting production deployment after merge to main..."'
-        - 'export PROJECT_NAME="people-registry"'
-        - 'export STACK_NAME="PeopleRegisterInfrastructureStack"'
-        - 'export AWS_REGION="us-east-1"'
-        - 'export ENVIRONMENT="production"'
-        - 'export APPLICATION_NAME="People Register"'
-        - 'export APPLICATION_VERSION="1.0.0"'
-        - 'export ORGANIZATION="AWSCocha"'
-        - 'export COST_CENTER="UserGroup"'
-        - 'export LAMBDA_RUNTIME="python3.11"'
-        - 'export LAMBDA_MEMORY="256"'
-        - 'export LAMBDA_TIMEOUT="30"'
-        - 'export API_GATEWAY_NAME="PeopleRegisterAPI"'
-        - 'export API_GATEWAY_STAGE="prod"'
-        - 'export CDK_DEPLOY_TIMEOUT="1200"'
-        - 'export TEST_DATA_COUNT="5"'
-        - 'export OUTPUTS_FILE="outputs.json"'
-        - 'export DEPLOYMENT_OUTPUTS_FILE="deployment-outputs.env"'
-        - 'echo "Application: $APPLICATION_NAME v$APPLICATION_VERSION"'
-        - 'echo "Project: $PROJECT_NAME | Stack: $STACK_NAME | Region: $AWS_REGION"'
-        - 'echo "Organization: $ORGANIZATION | Cost Center: $COST_CENTER"'
-        - 'echo "Lambda: $LAMBDA_RUNTIME ($LAMBDA_MEMORY MB, ${LAMBDA_TIMEOUT}s timeout)"'
-        - 'echo "API Gateway: $API_GATEWAY_NAME ($API_GATEWAY_STAGE stage)"'
-        - 'echo "Setting up environment..."'
-        - 'cp /usr/local/bin/just /usr/local/bin/just || true'
-        - 'chmod +x /usr/local/bin/just'
-        - 'export PATH="/usr/local/bin:$PATH"'
-        - 'echo "Deploying infrastructure to production..."'
-        - 'timeout $CDK_DEPLOY_TIMEOUT just deploy-infrastructure-full'
-        - 'echo "Testing API endpoints..."'
-        - 'just test-api'
-        - 'echo "Creating $TEST_DATA_COUNT test records..."'
-        - 'just create-test-data'
-        - 'echo "Saving deployment outputs..."'
-        - 'cp $OUTPUTS_FILE deployment-outputs-prod.json'
-        - 'cp $DEPLOYMENT_OUTPUTS_FILE deployment-outputs-prod.env'
-        - 'echo "Printing deployment summary..."'
-        - 'just print-deployment-summary'
-        - 'echo "✅ Production infrastructure deployment completed"'
+      Steps:
+        - Run: |
+            echo "🚀 Starting production deployment after merge to main..."
+            export PROJECT_NAME="people-registry"
+            export STACK_NAME="PeopleRegisterInfrastructureStack"
+            export AWS_REGION="us-east-1"
+            export ENVIRONMENT="production"
+            export APPLICATION_NAME="People-Register"
+            export APPLICATION_VERSION="1.0.0"
+            export ORGANIZATION="AWSCocha"
+            export COST_CENTER="UserGroup"
+            export LAMBDA_RUNTIME="python3.11"
+            export LAMBDA_MEMORY="256"
+            export LAMBDA_TIMEOUT="30"
+            export API_GATEWAY_NAME="PeopleRegisterAPI"
+            export API_GATEWAY_STAGE="prod"
+            export CDK_DEPLOY_TIMEOUT="1200"
+            export TEST_DATA_COUNT="5"
+            export OUTPUTS_FILE="outputs.json"
+            export DEPLOYMENT_OUTPUTS_FILE="deployment-outputs.env"
+            echo "Application: $APPLICATION_NAME v$APPLICATION_VERSION"
+            echo "Project: $PROJECT_NAME | Stack: $STACK_NAME | Region: $AWS_REGION"
+            echo "Organization: $ORGANIZATION | Cost Center: $COST_CENTER"
+            echo "Lambda: $LAMBDA_RUNTIME ($LAMBDA_MEMORY MB, ${LAMBDA_TIMEOUT}s timeout)"
+            echo "API Gateway: $API_GATEWAY_NAME ($API_GATEWAY_STAGE stage)"
+            echo "Setting up environment..."
+            cp /usr/local/bin/just /usr/local/bin/just || true
+            chmod +x /usr/local/bin/just
+            export PATH="/usr/local/bin:$PATH"
+            echo "Deploying infrastructure to production..."
+            timeout $CDK_DEPLOY_TIMEOUT just deploy-infrastructure-full
+            echo "Testing API endpoints..."
+            just test-api
+            echo "Creating $TEST_DATA_COUNT test records..."
+            just create-test-data
+            echo "Saving deployment outputs..."
+            cp $OUTPUTS_FILE deployment-outputs-prod.json
+            cp $DEPLOYMENT_OUTPUTS_FILE deployment-outputs-prod.env
+            echo "Printing deployment summary..."
+            just print-deployment-summary
+            echo "✅ Production infrastructure deployment completed"
     Outputs:
       Artifacts:
         - Name: prod-infrastructure-outputs
@@ -137,15 +136,14 @@ Actions:
         - "${WorkflowSource.BranchName}"
         - "main"
 
-  # Deploy frontend after infrastructure (ONLY on main branch push after merge)
   DeployFrontend:
     Identifier: aws/build@v1
     DependsOn:
       - DeployProduction
     Environment:
-      Name: production
+      Name: Production
       Connections:
-        - Name: 142728997126
+        - Name: "142728997126"
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
     Inputs:
       Sources:
@@ -154,41 +152,41 @@ Actions:
         - just-binary
         - prod-infrastructure-outputs
     Configuration:
-      Commands:
-        - 'echo "🎨 Starting frontend deployment after infrastructure..."'
-        - 'export PROJECT_NAME="people-registry"'
-        - 'export ENVIRONMENT="production"'
-        - 'export DEPLOYMENT_OUTPUTS_FILE="deployment-outputs.env"'
-        - 'echo "Project: $PROJECT_NAME | Environment: $ENVIRONMENT"'
-        - 'echo "Setting up environment..."'
-        - 'cp /usr/local/bin/just /usr/local/bin/just || true'
-        - 'chmod +x /usr/local/bin/just'
-        - 'export PATH="/usr/local/bin:$PATH"'
-        - 'echo "Restoring deployment outputs..."'
-        - 'cp deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE'
-        - 'echo "Deploying frontend..."'
-        - 'just deploy-frontend-full'
-        - 'echo "Testing frontend..."'
-        - 'just test-frontend'
-        - 'echo "Validating complete deployment..."'
-        - 'just validate-deployment'
-        - 'echo "Final deployment summary..."'
-        - 'just print-deployment-summary'
-        - 'echo "✅ Frontend deployment completed"'
+      Steps:
+        - Run: |
+            echo "🎨 Starting frontend deployment after infrastructure..."
+            export PROJECT_NAME="people-registry"
+            export ENVIRONMENT="production"
+            export DEPLOYMENT_OUTPUTS_FILE="deployment-outputs.env"
+            echo "Project: $PROJECT_NAME | Environment: $ENVIRONMENT"
+            echo "Setting up environment..."
+            cp /usr/local/bin/just /usr/local/bin/just || true
+            chmod +x /usr/local/bin/just
+            export PATH="/usr/local/bin:$PATH"
+            echo "Restoring deployment outputs..."
+            cp deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE
+            echo "Deploying frontend..."
+            just deploy-frontend-full
+            echo "Testing frontend..."
+            just test-frontend
+            echo "Validating complete deployment..."
+            just validate-deployment
+            echo "Final deployment summary..."
+            just print-deployment-summary
+            echo "✅ Frontend deployment completed"
     Condition:
       StringEquals:
         - "${WorkflowSource.BranchName}"
         - "main"
 
-  # Integration tests (ONLY on main branch push after merge)
   IntegrationTests:
     Identifier: aws/build@v1
     DependsOn:
       - DeployFrontend
     Environment:
-      Name: production
+      Name: Production
       Connections:
-        - Name: 142728997126
+        - Name: "142728997126"
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
     Inputs:
       Sources:
@@ -197,38 +195,38 @@ Actions:
         - just-binary
         - prod-infrastructure-outputs
     Configuration:
-      Commands:
-        - 'echo "🧪 Running integration tests after deployment..."'
-        - 'export PROJECT_NAME="people-registry"'
-        - 'export INTEGRATION_TEST_TIMEOUT="60"'
-        - 'export HEALTH_CHECK_TIMEOUT="30"'
-        - 'export DEPLOYMENT_OUTPUTS_FILE="deployment-outputs.env"'
-        - 'echo "Project: $PROJECT_NAME | Timeout: $INTEGRATION_TEST_TIMEOUT seconds"'
-        - 'echo "Setting up environment..."'
-        - 'cp /usr/local/bin/just /usr/local/bin/just || true'
-        - 'chmod +x /usr/local/bin/just'
-        - 'export PATH="/usr/local/bin:$PATH"'
-        - 'echo "Restoring deployment outputs..."'
-        - 'cp deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE'
-        - 'echo "Running integration tests..."'
-        - 'source $DEPLOYMENT_OUTPUTS_FILE'
-        - 'echo "Testing API health endpoint..."'
-        - 'timeout $HEALTH_CHECK_TIMEOUT curl -f "$API_URL/health" || exit 1'
-        - 'echo "Testing API people endpoint..."'
-        - 'timeout $HEALTH_CHECK_TIMEOUT curl -f "$API_URL/people" || exit 1'
-        - 'echo "Testing frontend accessibility..."'
-        - 'timeout $HEALTH_CHECK_TIMEOUT curl -f -I "$FRONTEND_URL" || exit 1'
-        - 'echo "Verifying test data..."'
-        - 'PEOPLE_COUNT=$(curl -s "$API_URL/people" | jq length)'
-        - 'echo "People count: $PEOPLE_COUNT"'
-        - 'if [ "$PEOPLE_COUNT" -lt 1 ]; then echo "No people found, test failed"; exit 1; fi'
-        - 'echo "✅ All integration tests passed!"'
+      Steps:
+        - Run: |
+            echo "🧪 Running integration tests after deployment..."
+            export PROJECT_NAME="people-registry"
+            export INTEGRATION_TEST_TIMEOUT="60"
+            export HEALTH_CHECK_TIMEOUT="30"
+            export DEPLOYMENT_OUTPUTS_FILE="deployment-outputs.env"
+            echo "Project: $PROJECT_NAME | Timeout: $INTEGRATION_TEST_TIMEOUT seconds"
+            echo "Setting up environment..."
+            cp /usr/local/bin/just /usr/local/bin/just || true
+            chmod +x /usr/local/bin/just
+            export PATH="/usr/local/bin:$PATH"
+            echo "Restoring deployment outputs..."
+            cp deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE
+            echo "Running integration tests..."
+            source $DEPLOYMENT_OUTPUTS_FILE
+            echo "Testing API health endpoint..."
+            timeout $HEALTH_CHECK_TIMEOUT curl -f "$API_URL/health" || exit 1
+            echo "Testing API people endpoint..."
+            timeout $HEALTH_CHECK_TIMEOUT curl -f "$API_URL/people" || exit 1
+            echo "Testing frontend accessibility..."
+            timeout $HEALTH_CHECK_TIMEOUT curl -f -I "$FRONTEND_URL" || exit 1
+            echo "Verifying test data..."
+            PEOPLE_COUNT=$(curl -s "$API_URL/people" | jq length)
+            echo "People count: $PEOPLE_COUNT"
+            if [ "$PEOPLE_COUNT" -lt 1 ]; then echo "No people found, test failed"; exit 1; fi
+            echo "✅ All integration tests passed!"
     Condition:
       StringEquals:
         - "${WorkflowSource.BranchName}"
         - "main"
 
-  # Notification of successful deployment (ONLY on main branch push after merge)
   NotifyDeploymentSuccess:
     Identifier: aws/build@v1
     DependsOn:
@@ -240,26 +238,27 @@ Actions:
         - just-binary
         - prod-infrastructure-outputs
     Configuration:
-      Commands:
-        - 'echo "📢 Deployment Notification"'
-        - 'echo "=========================="'
-        - 'echo "✅ Production deployment completed successfully!"'
-        - 'export PROJECT_NAME="people-registry"'
-        - 'export STACK_NAME="PeopleRegisterInfrastructureStack"'
-        - 'export AWS_REGION="us-east-1"'
-        - 'export ENVIRONMENT="production"'
-        - 'echo "🔗 Project: $PROJECT_NAME"'
-        - 'echo "🏗️  Stack: $STACK_NAME"'
-        - 'echo "🌍 Region: $AWS_REGION"'
-        - 'echo "🔧 Environment: $ENVIRONMENT"'
-        - 'echo "📅 Deployment time: $(date)"'
-        - 'echo "🏷️  Commit: ${WorkflowSource.CommitId}"'
-        - 'echo "👤 Author: ${WorkflowSource.CommitAuthor}"'
-        - 'source deployment-outputs-prod.env'
-        - 'echo "🌐 Frontend URL: $FRONTEND_URL"'
-        - 'echo "🔧 API URL: $API_URL"'
-        - 'echo "📊 All systems operational"'
-        - 'echo "=========================="'
+      Steps:
+        - Run: |
+            echo "📢 Deployment Notification"
+            echo "=========================="
+            echo "✅ Production deployment completed successfully!"
+            export PROJECT_NAME="people-registry"
+            export STACK_NAME="PeopleRegisterInfrastructureStack"
+            export AWS_REGION="us-east-1"
+            export ENVIRONMENT="production"
+            echo "🔗 Project: $PROJECT_NAME"
+            echo "🏗️  Stack: $STACK_NAME"
+            echo "🌍 Region: $AWS_REGION"
+            echo "🔧 Environment: $ENVIRONMENT"
+            echo "📅 Deployment time: $(date)"
+            echo "🏷️  Commit: ${WorkflowSource.CommitId}"
+            echo "👤 Author: ${WorkflowSource.CommitAuthor}"
+            source deployment-outputs-prod.env
+            echo "🌐 Frontend URL: $FRONTEND_URL"
+            echo "🔧 API URL: $API_URL"
+            echo "📊 All systems operational"
+            echo "=========================="
     Condition:
       StringEquals:
         - "${WorkflowSource.BranchName}"
