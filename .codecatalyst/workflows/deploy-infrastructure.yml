@@ -79,8 +79,9 @@ Actions:
     Identifier: aws/build@v1
     DependsOn:
       - ValidateInfrastructure
+    Compute:
+      Type: EC2
     Environment:
-      Name: production_env
       Connections:
         - Name: account_142728997126
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
@@ -170,8 +171,9 @@ Actions:
     Identifier: aws/build@v1
     DependsOn:
       - DeployProduction
+    Compute:
+      Type: EC2
     Environment:
-      Name: production_env
       Connections:
         - Name: account_142728997126
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
@@ -224,8 +226,9 @@ Actions:
     Identifier: aws/build@v1
     DependsOn:
       - DeployFrontend
+    Compute:
+      Type: EC2
     Environment:
-      Name: production_env
       Connections:
         - Name: account_142728997126
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
