@@ -82,6 +82,7 @@ Actions:
     Compute:
       Type: EC2
     Environment:
+      Name: default
       Connections:
         - Name: account_142728997126
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
@@ -174,6 +175,7 @@ Actions:
     Compute:
       Type: EC2
     Environment:
+      Name: default
       Connections:
         - Name: account_142728997126
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
@@ -229,6 +231,7 @@ Actions:
     Compute:
       Type: EC2
     Environment:
+      Name: default
       Connections:
         - Name: account_142728997126
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
