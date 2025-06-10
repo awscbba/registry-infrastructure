@@ -78,7 +78,7 @@ Actions:
     Environment:
       Name: production
       Connections:
-        - Name: aws-connection
+        - Name: 142728997126
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
     Inputs:
       Sources:
@@ -121,7 +121,7 @@ Actions:
     Environment:
       Name: production
       Connections:
-        - Name: aws-connection
+        - Name: 142728997126
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
     Inputs:
       Sources:
