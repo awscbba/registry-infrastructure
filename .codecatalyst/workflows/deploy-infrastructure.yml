@@ -74,7 +74,7 @@ Actions:
     DependsOn:
       - ValidateInfrastructure
     Environment:
-      Name: Production
+      Name: production_env
       Connections:
         - Name: "142728997126"
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
@@ -86,6 +86,12 @@ Actions:
     Configuration:
       Steps:
         - Run: |
+            # Only run on main branch
+            if [ "${WorkflowSource.BranchName}" != "main" ]; then
+              echo "Skipping deployment - not on main branch"
+              exit 0
+            fi
+            
             echo "🚀 Starting production deployment after merge to main..."
             export PROJECT_NAME="people-registry"
             export STACK_NAME="PeopleRegisterInfrastructureStack"
@@ -131,17 +137,13 @@ Actions:
           Files:
             - deployment-outputs-prod.json
             - deployment-outputs-prod.env
-    Condition:
-      StringEquals:
-        - "${WorkflowSource.BranchName}"
-        - "main"
 
   DeployFrontend:
     Identifier: aws/build@v1
     DependsOn:
       - DeployProduction
     Environment:
-      Name: Production
+      Name: production_env
       Connections:
         - Name: "142728997126"
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
@@ -154,6 +156,12 @@ Actions:
     Configuration:
       Steps:
         - Run: |
+            # Only run on main branch
+            if [ "${WorkflowSource.BranchName}" != "main" ]; then
+              echo "Skipping frontend deployment - not on main branch"
+              exit 0
+            fi
+            
             echo "🎨 Starting frontend deployment after infrastructure..."
             export PROJECT_NAME="people-registry"
             export ENVIRONMENT="production"
@@ -174,17 +182,13 @@ Actions:
             echo "Final deployment summary..."
             just print-deployment-summary
             echo "✅ Frontend deployment completed"
-    Condition:
-      StringEquals:
-        - "${WorkflowSource.BranchName}"
-        - "main"
 
   IntegrationTests:
     Identifier: aws/build@v1
     DependsOn:
       - DeployFrontend
     Environment:
-      Name: Production
+      Name: production_env
       Connections:
         - Name: "142728997126"
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
@@ -197,6 +201,12 @@ Actions:
     Configuration:
       Steps:
         - Run: |
+            # Only run on main branch
+            if [ "${WorkflowSource.BranchName}" != "main" ]; then
+              echo "Skipping integration tests - not on main branch"
+              exit 0
+            fi
+            
             echo "🧪 Running integration tests after deployment..."
             export PROJECT_NAME="people-registry"
             export INTEGRATION_TEST_TIMEOUT="60"
@@ -222,10 +232,6 @@ Actions:
             echo "People count: $PEOPLE_COUNT"
             if [ "$PEOPLE_COUNT" -lt 1 ]; then echo "No people found, test failed"; exit 1; fi
             echo "✅ All integration tests passed!"
-    Condition:
-      StringEquals:
-        - "${WorkflowSource.BranchName}"
-        - "main"
 
   NotifyDeploymentSuccess:
     Identifier: aws/build@v1
@@ -240,6 +246,12 @@ Actions:
     Configuration:
       Steps:
         - Run: |
+            # Only run on main branch
+            if [ "${WorkflowSource.BranchName}" != "main" ]; then
+              echo "Skipping notification - not on main branch"
+              exit 0
+            fi
+            
             echo "📢 Deployment Notification"
             echo "=========================="
             echo "✅ Production deployment completed successfully!"
@@ -259,7 +271,3 @@ Actions:
             echo "🔧 API URL: $API_URL"
             echo "📊 All systems operational"
             echo "=========================="
-    Condition:
-      StringEquals:
-        - "${WorkflowSource.BranchName}"
-        - "main"
