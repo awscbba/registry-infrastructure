@@ -48,8 +48,6 @@ Actions:
             
             # Check prerequisites
             echo "Checking prerequisites..."
-            command -v aws >/dev/null 2>&1 || (echo "AWS CLI is not installed" && exit 1)
-            aws sts get-caller-identity >/dev/null 2>&1 || (echo "AWS credentials not configured" && exit 1)
             command -v python3 >/dev/null 2>&1 || (echo "Python 3 is not installed" && exit 1)
             command -v node >/dev/null 2>&1 || (echo "Node.js is not installed" && exit 1)
             
@@ -79,13 +77,6 @@ Actions:
     Identifier: aws/build@v1
     DependsOn:
       - ValidateInfrastructure
-    Compute:
-      Type: EC2
-    Environment:
-      Name: default
-      Connections:
-        - Name: account_142728997126
-          Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
     Inputs:
       Sources:
         - WorkflowSource
@@ -172,13 +163,6 @@ Actions:
     Identifier: aws/build@v1
     DependsOn:
       - DeployProduction
-    Compute:
-      Type: EC2
-    Environment:
-      Name: default
-      Connections:
-        - Name: account_142728997126
-          Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
     Inputs:
       Sources:
         - WorkflowSource
@@ -228,13 +212,6 @@ Actions:
     Identifier: aws/build@v1
     DependsOn:
       - DeployFrontend
-    Compute:
-      Type: EC2
-    Environment:
-      Name: default
-      Connections:
-        - Name: account_142728997126
-          Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
     Inputs:
       Sources:
         - WorkflowSource
