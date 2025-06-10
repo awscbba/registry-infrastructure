@@ -1,4 +1,4 @@
-Name: Deploy-Infrastructure
+Name: Deploy_Infrastructure
 SchemaVersion: "1.0"
 
 Triggers:
@@ -27,7 +27,7 @@ Actions:
             echo "✅ just installed successfully"
     Outputs:
       Artifacts:
-        - Name: just-binary
+        - Name: just_binary
           Files:
             - "/usr/local/bin/just"
 
@@ -39,7 +39,7 @@ Actions:
       Sources:
         - WorkflowSource
       Artifacts:
-        - just-binary
+        - just_binary
     Configuration:
       Steps:
         - Run: |
@@ -51,7 +51,7 @@ Actions:
             export STACK_NAME="PeopleRegisterInfrastructureStack"
             export AWS_REGION="us-east-1"
             export ENVIRONMENT="production"
-            export APPLICATION_NAME="People-Register"
+            export APPLICATION_NAME="People_Register"
             export APPLICATION_VERSION="1.0.0"
             export ORGANIZATION="AWSCocha"
             export LAMBDA_RUNTIME="python3.11"
@@ -76,13 +76,13 @@ Actions:
     Environment:
       Name: production_env
       Connections:
-        - Name: "142728997126"
+        - Name: account_142728997126
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
     Inputs:
       Sources:
         - WorkflowSource
       Artifacts:
-        - just-binary
+        - just_binary
     Configuration:
       Steps:
         - Run: |
@@ -97,7 +97,7 @@ Actions:
             export STACK_NAME="PeopleRegisterInfrastructureStack"
             export AWS_REGION="us-east-1"
             export ENVIRONMENT="production"
-            export APPLICATION_NAME="People-Register"
+            export APPLICATION_NAME="People_Register"
             export APPLICATION_VERSION="1.0.0"
             export ORGANIZATION="AWSCocha"
             export COST_CENTER="UserGroup"
@@ -133,7 +133,7 @@ Actions:
             echo "✅ Production infrastructure deployment completed"
     Outputs:
       Artifacts:
-        - Name: prod-infrastructure-outputs
+        - Name: prod_infrastructure_outputs
           Files:
             - deployment-outputs-prod.json
             - deployment-outputs-prod.env
@@ -145,14 +145,14 @@ Actions:
     Environment:
       Name: production_env
       Connections:
-        - Name: "142728997126"
+        - Name: account_142728997126
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
     Inputs:
       Sources:
         - WorkflowSource
       Artifacts:
-        - just-binary
-        - prod-infrastructure-outputs
+        - just_binary
+        - prod_infrastructure_outputs
     Configuration:
       Steps:
         - Run: |
@@ -190,14 +190,14 @@ Actions:
     Environment:
       Name: production_env
       Connections:
-        - Name: "142728997126"
+        - Name: account_142728997126
           Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
     Inputs:
       Sources:
         - WorkflowSource
       Artifacts:
-        - just-binary
-        - prod-infrastructure-outputs
+        - just_binary
+        - prod_infrastructure_outputs
     Configuration:
       Steps:
         - Run: |
@@ -241,8 +241,8 @@ Actions:
       Sources:
         - WorkflowSource
       Artifacts:
-        - just-binary
-        - prod-infrastructure-outputs
+        - just_binary
+        - prod_infrastructure_outputs
     Configuration:
       Steps:
         - Run: |
