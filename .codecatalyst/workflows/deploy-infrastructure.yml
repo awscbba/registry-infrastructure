@@ -13,7 +13,7 @@ Triggers:
       - REVISION
 
 Actions:
-  ValidateInfrastructure:
+  ValidateAndDeploy:
     Identifier: aws/build@v1
     Inputs:
       Sources:
@@ -21,7 +21,7 @@ Actions:
     Configuration:
       Steps:
         - Run: |
-            echo "Setting up environment..."
+            echo "🚀 Starting complete deployment pipeline..."
             
             # Install just command runner
             echo "Installing just command runner..."
@@ -72,50 +72,18 @@ Actions:
             python -m pytest tests/ -v || echo "No tests found"
             
             echo "✅ Infrastructure validation completed"
-
-  DeployProduction:
-    Identifier: aws/build@v1
-    DependsOn:
-      - ValidateInfrastructure
-    Inputs:
-      Sources:
-        - WorkflowSource
-    Configuration:
-      Steps:
-        - Run: |
-            echo "🚀 Starting production deployment..."
             
-            # Always create output files first (in workspace root)
-            echo "Creating output files in workspace root..."
-            
-            # Only run actual deployment on main branch
+            # Only deploy on main branch
             if [ "${WorkflowSource.BranchName}" != "main" ]; then
-              echo "Not on main branch - creating placeholder outputs"
-              echo '{"message": "skipped_non_main_branch"}' > deployment-outputs-prod.json
-              echo "API_URL=https://placeholder.example.com/api" > deployment-outputs-prod.env
-              echo "FRONTEND_URL=https://placeholder.example.com" >> deployment-outputs-prod.env
-              echo "SKIPPED=true" >> deployment-outputs-prod.env
-              echo "✅ Placeholder outputs created"
-              ls -la deployment-outputs-prod.*
+              echo "Not on main branch - skipping deployment"
+              echo "✅ Validation completed for non-main branch"
               exit 0
             fi
             
-            # Install just command runner
-            echo "Installing just command runner..."
-            curl --proto "=https" --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
-            just --version
+            echo "🚀 Starting production deployment on main branch..."
             
-            # Set up environment variables
-            export PROJECT_NAME="people-registry"
-            export STACK_NAME="PeopleRegisterInfrastructureStack"
-            export AWS_REGION="us-east-1"
-            export ENVIRONMENT="production"
-            export APPLICATION_NAME="People_Register"
-            export APPLICATION_VERSION="1.0.0"
-            export ORGANIZATION="AWSCocha"
+            # Set up deployment environment variables
             export COST_CENTER="UserGroup"
-            export LAMBDA_RUNTIME="python3.11"
-            export LAMBDA_MEMORY="256"
             export LAMBDA_TIMEOUT="30"
             export API_GATEWAY_NAME="PeopleRegisterAPI"
             export API_GATEWAY_STAGE="prod"
@@ -130,38 +98,19 @@ Actions:
             echo "Lambda: $LAMBDA_RUNTIME ($LAMBDA_MEMORY MB, ${LAMBDA_TIMEOUT}s timeout)"
             echo "API Gateway: $API_GATEWAY_NAME ($API_GATEWAY_STAGE stage)"
             
-            # Install CDK if not present
-            if ! command -v cdk >/dev/null 2>&1; then
-                echo "Installing AWS CDK..."
-                npm install -g aws-cdk
-            fi
-            
-            # Set up Python virtual environment
-            echo "Setting up Python virtual environment..."
-            if [ ! -d ".venv" ]; then
-                python3 -m venv .venv
-            fi
-            source .venv/bin/activate
-            pip install -r requirements.txt
-            
             echo "Deploying infrastructure to production..."
             if timeout $CDK_DEPLOY_TIMEOUT just deploy-infrastructure-full; then
                 echo "✅ Infrastructure deployment successful"
+                DEPLOYMENT_SUCCESS=true
             else
-                echo "❌ Infrastructure deployment failed, creating fallback outputs..."
+                echo "❌ Infrastructure deployment failed, but continuing with tests..."
                 echo '{"error": "deployment_failed"}' > $OUTPUTS_FILE
                 echo "API_URL=https://failed.example.com/api" > $DEPLOYMENT_OUTPUTS_FILE
                 echo "FRONTEND_URL=https://failed.example.com" >> $DEPLOYMENT_OUTPUTS_FILE
                 echo "DEPLOYMENT_FAILED=true" >> $DEPLOYMENT_OUTPUTS_FILE
+                DEPLOYMENT_SUCCESS=false
             fi
             
-            echo "Testing API endpoints..."
-            just test-api || echo "API tests failed, continuing..."
-            
-            echo "Creating $TEST_DATA_COUNT test records..."
-            just create-test-data || echo "Test data creation failed, continuing..."
-            
-            echo "Saving deployment outputs..."
             # Ensure output files exist
             if [ ! -f "$OUTPUTS_FILE" ]; then
                 echo '{"message": "no outputs generated"}' > $OUTPUTS_FILE
@@ -171,80 +120,63 @@ Actions:
                 echo "FRONTEND_URL=https://default.example.com" >> $DEPLOYMENT_OUTPUTS_FILE
             fi
             
-            # Copy to artifact files in workspace root
-            cp $OUTPUTS_FILE deployment-outputs-prod.json
-            cp $DEPLOYMENT_OUTPUTS_FILE deployment-outputs-prod.env
+            echo "Testing API endpoints..."
+            just test-api || echo "API tests failed, continuing..."
             
-            echo "Printing deployment summary..."
-            just print-deployment-summary || echo "Summary generation failed, continuing..."
+            echo "Creating $TEST_DATA_COUNT test records..."
+            just create-test-data || echo "Test data creation failed, continuing..."
             
-            echo "✅ Production infrastructure deployment completed"
+            echo "Deployment outputs created:"
+            ls -la $OUTPUTS_FILE $DEPLOYMENT_OUTPUTS_FILE
+            echo "Contents of deployment outputs:"
+            cat $DEPLOYMENT_OUTPUTS_FILE
             
-            # List files for debugging
-            echo "Files created in workspace root:"
-            ls -la deployment-outputs-prod.*
-    Outputs:
-      Artifacts:
-        - Name: prod_infrastructure_outputs
-          Files:
-            - deployment-outputs-prod.json
-            - deployment-outputs-prod.env
-
-  DeployFrontend:
-    Identifier: aws/build@v1
-    DependsOn:
-      - DeployProduction
-    Inputs:
-      Sources:
-        - WorkflowSource
-      Artifacts:
-        - prod_infrastructure_outputs
-    Configuration:
-      Steps:
-        - Run: |
-            echo "🎨 Starting frontend deployment..."
+            # Load deployment outputs for testing
+            source $DEPLOYMENT_OUTPUTS_FILE
             
-            # List available files for debugging
-            echo "Available files in workspace:"
-            ls -la
-            echo "Looking for deployment output files:"
-            find . -name "*deployment-outputs*" -type f
+            echo "🧪 Running integration tests..."
+            export INTEGRATION_TEST_TIMEOUT="60"
+            export HEALTH_CHECK_TIMEOUT="30"
             
-            # Check if deployment was skipped
-            if [ -f "deployment-outputs-prod.env" ] && grep -q "SKIPPED=true" deployment-outputs-prod.env 2>/dev/null; then
-              echo "Skipping frontend deployment - infrastructure deployment was skipped"
-              exit 0
-            fi
+            echo "Testing with API_URL: $API_URL"
+            echo "Testing with FRONTEND_URL: $FRONTEND_URL"
             
-            # Check if we're on main branch
-            if [ "${WorkflowSource.BranchName}" != "main" ]; then
-              echo "Skipping frontend deployment - not on main branch"
-              exit 0
-            fi
-            
-            # Install just command runner
-            echo "Installing just command runner..."
-            curl --proto "=https" --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
-            just --version
-            
-            # Set up environment variables
-            export PROJECT_NAME="people-registry"
-            export ENVIRONMENT="production"
-            export DEPLOYMENT_OUTPUTS_FILE="deployment-outputs.env"
-            
-            echo "Project: $PROJECT_NAME | Environment: $ENVIRONMENT"
-            
-            echo "Restoring deployment outputs..."
-            if [ -f "deployment-outputs-prod.env" ]; then
-                cp deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE
-                echo "✅ Deployment outputs restored from deployment-outputs-prod.env"
+            # Skip tests if using placeholder URLs
+            if [[ "$API_URL" == *"example.com"* ]]; then
+                echo "Using placeholder URLs - skipping actual tests"
             else
-                echo "❌ No deployment outputs found, creating defaults..."
-                echo "API_URL=https://default.example.com/api" > $DEPLOYMENT_OUTPUTS_FILE
-                echo "FRONTEND_URL=https://default.example.com" >> $DEPLOYMENT_OUTPUTS_FILE
+                echo "Testing API health endpoint..."
+                if timeout $HEALTH_CHECK_TIMEOUT curl -f "$API_URL/health"; then
+                    echo "✅ API health test passed"
+                else
+                    echo "❌ API health test failed"
+                fi
+                
+                echo "Testing API people endpoint..."
+                if timeout $HEALTH_CHECK_TIMEOUT curl -f "$API_URL/people"; then
+                    echo "✅ API people test passed"
+                else
+                    echo "❌ API people test failed"
+                fi
+                
+                echo "Testing frontend accessibility..."
+                if timeout $HEALTH_CHECK_TIMEOUT curl -f -I "$FRONTEND_URL"; then
+                    echo "✅ Frontend test passed"
+                else
+                    echo "❌ Frontend test failed"
+                fi
+                
+                echo "Verifying test data..."
+                PEOPLE_COUNT=$(curl -s "$API_URL/people" | jq length 2>/dev/null || echo "0")
+                echo "People count: $PEOPLE_COUNT"
+                if [ "$PEOPLE_COUNT" -gt 0 ]; then 
+                    echo "✅ Test data verification passed"
+                else
+                    echo "⚠️ No test data found"
+                fi
             fi
             
-            echo "Deploying frontend..."
+            echo "🎨 Deploying frontend..."
             just deploy-frontend-full || echo "Frontend deployment failed, continuing..."
             
             echo "Testing frontend..."
@@ -253,135 +185,16 @@ Actions:
             echo "Validating complete deployment..."
             just validate-deployment || echo "Deployment validation failed, continuing..."
             
-            echo "Final deployment summary..."
+            echo "Printing deployment summary..."
             just print-deployment-summary || echo "Summary generation failed, continuing..."
             
-            echo "✅ Frontend deployment completed"
-
-  IntegrationTests:
-    Identifier: aws/build@v1
-    DependsOn:
-      - DeployFrontend
-    Inputs:
-      Sources:
-        - WorkflowSource
-      Artifacts:
-        - prod_infrastructure_outputs
-    Configuration:
-      Steps:
-        - Run: |
-            echo "🧪 Running integration tests after deployment..."
-            
-            # List available files for debugging
-            echo "Available files in workspace:"
-            ls -la
-            echo "Looking for deployment output files:"
-            find . -name "*deployment-outputs*" -type f
-            
-            # Check if deployment was skipped
-            if [ -f "deployment-outputs-prod.env" ] && grep -q "SKIPPED=true" deployment-outputs-prod.env 2>/dev/null; then
-              echo "Skipping integration tests - infrastructure deployment was skipped"
-              exit 0
-            fi
-            
-            # Check if we're on main branch
-            if [ "${WorkflowSource.BranchName}" != "main" ]; then
-              echo "Skipping integration tests - not on main branch"
-              exit 0
-            fi
-            
-            # Set up environment variables
-            export PROJECT_NAME="people-registry"
-            export INTEGRATION_TEST_TIMEOUT="60"
-            export HEALTH_CHECK_TIMEOUT="30"
-            export DEPLOYMENT_OUTPUTS_FILE="deployment-outputs.env"
-            
-            echo "Project: $PROJECT_NAME | Timeout: $INTEGRATION_TEST_TIMEOUT seconds"
-            
-            echo "Restoring deployment outputs..."
-            if [ -f "deployment-outputs-prod.env" ]; then
-                cp deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE
-                echo "✅ Deployment outputs restored from deployment-outputs-prod.env"
-                echo "Contents of deployment outputs:"
-                cat $DEPLOYMENT_OUTPUTS_FILE
-            else
-                echo "❌ No deployment outputs found, creating defaults for testing..."
-                echo "API_URL=https://test.example.com/api" > $DEPLOYMENT_OUTPUTS_FILE
-                echo "FRONTEND_URL=https://test.example.com" >> $DEPLOYMENT_OUTPUTS_FILE
-                echo "Contents of default deployment outputs:"
-                cat $DEPLOYMENT_OUTPUTS_FILE
-            fi
-            
-            echo "Running integration tests..."
-            if [ -f "$DEPLOYMENT_OUTPUTS_FILE" ]; then
-                source $DEPLOYMENT_OUTPUTS_FILE
-                echo "Testing with API_URL: $API_URL"
-                echo "Testing with FRONTEND_URL: $FRONTEND_URL"
-                
-                # Skip tests if using placeholder URLs
-                if [[ "$API_URL" == *"example.com"* ]]; then
-                    echo "Using placeholder URLs - skipping actual tests"
-                else
-                    echo "Testing API health endpoint..."
-                    timeout $HEALTH_CHECK_TIMEOUT curl -f "$API_URL/health" || echo "API health test failed"
-                    
-                    echo "Testing API people endpoint..."
-                    timeout $HEALTH_CHECK_TIMEOUT curl -f "$API_URL/people" || echo "API people test failed"
-                    
-                    echo "Testing frontend accessibility..."
-                    timeout $HEALTH_CHECK_TIMEOUT curl -f -I "$FRONTEND_URL" || echo "Frontend test failed"
-                    
-                    echo "Verifying test data..."
-                    PEOPLE_COUNT=$(curl -s "$API_URL/people" | jq length 2>/dev/null || echo "0")
-                    echo "People count: $PEOPLE_COUNT"
-                    if [ "$PEOPLE_COUNT" -lt 1 ]; then 
-                        echo "No people found, but continuing..."
-                    fi
-                fi
-            else
-                echo "Could not create deployment outputs file, skipping tests"
-            fi
-            
-            echo "✅ Integration tests completed"
-
-  NotifyDeploymentSuccess:
-    Identifier: aws/build@v1
-    DependsOn:
-      - IntegrationTests
-    Inputs:
-      Sources:
-        - WorkflowSource
-      Artifacts:
-        - prod_infrastructure_outputs
-    Configuration:
-      Steps:
-        - Run: |
             echo "📢 Deployment Notification"
             echo "=========================="
-            
-            # List available files for debugging
-            echo "Available files:"
-            ls -la
-            
-            # Check if deployment was skipped
-            if [ -f "deployment-outputs-prod.env" ] && grep -q "SKIPPED=true" deployment-outputs-prod.env 2>/dev/null; then
-              echo "ℹ️  Deployment was skipped (not on main branch)"
-              echo "=========================="
-              exit 0
+            if [ "$DEPLOYMENT_SUCCESS" = true ]; then
+                echo "✅ Production deployment completed successfully!"
+            else
+                echo "⚠️ Production deployment completed with issues"
             fi
-            
-            # Check if we're on main branch
-            if [ "${WorkflowSource.BranchName}" != "main" ]; then
-              echo "Skipping notification - not on main branch"
-              exit 0
-            fi
-            
-            echo "✅ Production deployment completed!"
-            
-            export PROJECT_NAME="people-registry"
-            export STACK_NAME="PeopleRegisterInfrastructureStack"
-            export AWS_REGION="us-east-1"
-            export ENVIRONMENT="production"
             
             echo "🔗 Project: $PROJECT_NAME"
             echo "🏗️  Stack: $STACK_NAME"
@@ -390,13 +203,9 @@ Actions:
             echo "📅 Deployment time: $(date)"
             echo "🏷️  Commit: ${WorkflowSource.CommitId}"
             echo "👤 Author: ${WorkflowSource.CommitAuthor}"
-            
-            if [ -f "deployment-outputs-prod.env" ]; then
-                source deployment-outputs-prod.env 2>/dev/null
-                echo "🌐 Frontend URL: $FRONTEND_URL"
-                echo "🔧 API URL: $API_URL"
-                echo "📊 All systems operational"
-            else
-                echo "⚠️  Deployment outputs not available"
-            fi
+            echo "🌐 Frontend URL: $FRONTEND_URL"
+            echo "🔧 API URL: $API_URL"
+            echo "📊 All systems checked"
             echo "=========================="
+            
+            echo "✅ Complete deployment pipeline finished"
