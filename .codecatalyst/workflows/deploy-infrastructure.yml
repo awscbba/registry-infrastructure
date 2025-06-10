@@ -85,18 +85,18 @@ Actions:
         - Run: |
             echo "🚀 Starting production deployment..."
             
-            # Always create output files first (even for non-main branches)
-            echo "Creating output files..."
-            mkdir -p outputs
+            # Always create output files first (in workspace root)
+            echo "Creating output files in workspace root..."
             
             # Only run actual deployment on main branch
             if [ "${WorkflowSource.BranchName}" != "main" ]; then
               echo "Not on main branch - creating placeholder outputs"
-              echo '{"message": "skipped_non_main_branch"}' > outputs/deployment-outputs-prod.json
-              echo "API_URL=https://placeholder.example.com/api" > outputs/deployment-outputs-prod.env
-              echo "FRONTEND_URL=https://placeholder.example.com" >> outputs/deployment-outputs-prod.env
-              echo "SKIPPED=true" >> outputs/deployment-outputs-prod.env
+              echo '{"message": "skipped_non_main_branch"}' > deployment-outputs-prod.json
+              echo "API_URL=https://placeholder.example.com/api" > deployment-outputs-prod.env
+              echo "FRONTEND_URL=https://placeholder.example.com" >> deployment-outputs-prod.env
+              echo "SKIPPED=true" >> deployment-outputs-prod.env
               echo "✅ Placeholder outputs created"
+              ls -la deployment-outputs-prod.*
               exit 0
             fi
             
@@ -171,9 +171,9 @@ Actions:
                 echo "FRONTEND_URL=https://default.example.com" >> $DEPLOYMENT_OUTPUTS_FILE
             fi
             
-            # Copy to outputs directory for artifact
-            cp $OUTPUTS_FILE outputs/deployment-outputs-prod.json
-            cp $DEPLOYMENT_OUTPUTS_FILE outputs/deployment-outputs-prod.env
+            # Copy to artifact files in workspace root
+            cp $OUTPUTS_FILE deployment-outputs-prod.json
+            cp $DEPLOYMENT_OUTPUTS_FILE deployment-outputs-prod.env
             
             echo "Printing deployment summary..."
             just print-deployment-summary || echo "Summary generation failed, continuing..."
@@ -181,14 +181,14 @@ Actions:
             echo "✅ Production infrastructure deployment completed"
             
             # List files for debugging
-            echo "Files created:"
-            ls -la outputs/
+            echo "Files created in workspace root:"
+            ls -la deployment-outputs-prod.*
     Outputs:
       Artifacts:
         - Name: prod_infrastructure_outputs
           Files:
-            - outputs/deployment-outputs-prod.json
-            - outputs/deployment-outputs-prod.env
+            - deployment-outputs-prod.json
+            - deployment-outputs-prod.env
 
   DeployFrontend:
     Identifier: aws/build@v1
@@ -205,11 +205,13 @@ Actions:
             echo "🎨 Starting frontend deployment..."
             
             # List available files for debugging
-            echo "Available files:"
-            find . -name "*.json" -o -name "*.env" | head -10
+            echo "Available files in workspace:"
+            ls -la
+            echo "Looking for deployment output files:"
+            find . -name "*deployment-outputs*" -type f
             
             # Check if deployment was skipped
-            if [ -f "outputs/deployment-outputs-prod.env" ] && grep -q "SKIPPED=true" outputs/deployment-outputs-prod.env 2>/dev/null; then
+            if [ -f "deployment-outputs-prod.env" ] && grep -q "SKIPPED=true" deployment-outputs-prod.env 2>/dev/null; then
               echo "Skipping frontend deployment - infrastructure deployment was skipped"
               exit 0
             fi
@@ -233,9 +235,9 @@ Actions:
             echo "Project: $PROJECT_NAME | Environment: $ENVIRONMENT"
             
             echo "Restoring deployment outputs..."
-            if [ -f "outputs/deployment-outputs-prod.env" ]; then
-                cp outputs/deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE
-                echo "✅ Deployment outputs restored"
+            if [ -f "deployment-outputs-prod.env" ]; then
+                cp deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE
+                echo "✅ Deployment outputs restored from deployment-outputs-prod.env"
             else
                 echo "❌ No deployment outputs found, creating defaults..."
                 echo "API_URL=https://default.example.com/api" > $DEPLOYMENT_OUTPUTS_FILE
@@ -271,11 +273,13 @@ Actions:
             echo "🧪 Running integration tests after deployment..."
             
             # List available files for debugging
-            echo "Available files:"
-            find . -name "*.json" -o -name "*.env" | head -10
+            echo "Available files in workspace:"
+            ls -la
+            echo "Looking for deployment output files:"
+            find . -name "*deployment-outputs*" -type f
             
             # Check if deployment was skipped
-            if [ -f "outputs/deployment-outputs-prod.env" ] && grep -q "SKIPPED=true" outputs/deployment-outputs-prod.env 2>/dev/null; then
+            if [ -f "deployment-outputs-prod.env" ] && grep -q "SKIPPED=true" deployment-outputs-prod.env 2>/dev/null; then
               echo "Skipping integration tests - infrastructure deployment was skipped"
               exit 0
             fi
@@ -295,17 +299,22 @@ Actions:
             echo "Project: $PROJECT_NAME | Timeout: $INTEGRATION_TEST_TIMEOUT seconds"
             
             echo "Restoring deployment outputs..."
-            if [ -f "outputs/deployment-outputs-prod.env" ]; then
-                cp outputs/deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE
-                echo "✅ Deployment outputs restored"
+            if [ -f "deployment-outputs-prod.env" ]; then
+                cp deployment-outputs-prod.env $DEPLOYMENT_OUTPUTS_FILE
+                echo "✅ Deployment outputs restored from deployment-outputs-prod.env"
+                echo "Contents of deployment outputs:"
+                cat $DEPLOYMENT_OUTPUTS_FILE
             else
                 echo "❌ No deployment outputs found, creating defaults for testing..."
                 echo "API_URL=https://test.example.com/api" > $DEPLOYMENT_OUTPUTS_FILE
                 echo "FRONTEND_URL=https://test.example.com" >> $DEPLOYMENT_OUTPUTS_FILE
+                echo "Contents of default deployment outputs:"
+                cat $DEPLOYMENT_OUTPUTS_FILE
             fi
             
             echo "Running integration tests..."
-            if source $DEPLOYMENT_OUTPUTS_FILE; then
+            if [ -f "$DEPLOYMENT_OUTPUTS_FILE" ]; then
+                source $DEPLOYMENT_OUTPUTS_FILE
                 echo "Testing with API_URL: $API_URL"
                 echo "Testing with FRONTEND_URL: $FRONTEND_URL"
                 
@@ -330,7 +339,7 @@ Actions:
                     fi
                 fi
             else
-                echo "Could not load deployment outputs, skipping tests"
+                echo "Could not create deployment outputs file, skipping tests"
             fi
             
             echo "✅ Integration tests completed"
@@ -350,8 +359,12 @@ Actions:
             echo "📢 Deployment Notification"
             echo "=========================="
             
+            # List available files for debugging
+            echo "Available files:"
+            ls -la
+            
             # Check if deployment was skipped
-            if [ -f "outputs/deployment-outputs-prod.env" ] && grep -q "SKIPPED=true" outputs/deployment-outputs-prod.env 2>/dev/null; then
+            if [ -f "deployment-outputs-prod.env" ] && grep -q "SKIPPED=true" deployment-outputs-prod.env 2>/dev/null; then
               echo "ℹ️  Deployment was skipped (not on main branch)"
               echo "=========================="
               exit 0
@@ -378,7 +391,8 @@ Actions:
             echo "🏷️  Commit: ${WorkflowSource.CommitId}"
             echo "👤 Author: ${WorkflowSource.CommitAuthor}"
             
-            if [ -f "outputs/deployment-outputs-prod.env" ] && source outputs/deployment-outputs-prod.env 2>/dev/null; then
+            if [ -f "deployment-outputs-prod.env" ]; then
+                source deployment-outputs-prod.env 2>/dev/null
                 echo "🌐 Frontend URL: $FRONTEND_URL"
                 echo "🔧 API URL: $API_URL"
                 echo "📊 All systems operational"
