@@ -1,0 +1,103 @@
+Name: Safe_Pipeline
+SchemaVersion: "1.0"
+
+Triggers:
+  - Type: PUSH
+    Branches:
+      - main
+
+Actions:
+  SafeDeploy:
+    Identifier: aws/build@v1
+    Inputs:
+      Sources:
+        - WorkflowSource
+    Configuration:
+      Steps:
+        - Run: |
+            # Don't exit on errors - continue and report
+            set +e
+            
+            echo "🚀 Safe Pipeline - Enhanced Error Reporting"
+            echo "Branch: ${WorkflowSource.BranchName}"
+            echo "Commit: ${WorkflowSource.CommitId}"
+            
+            # Track overall success
+            OVERALL_SUCCESS=true
+            
+            # Function to run commands with error tracking
+            run_step() {
+                local step_name="$1"
+                local command="$2"
+                echo "🔄 Running: $step_name"
+                
+                if eval "$command"; then
+                    echo "✅ $step_name - SUCCESS"
+                    return 0
+                else
+                    local exit_code=$?
+                    echo "❌ $step_name - FAILED (exit code: $exit_code)"
+                    OVERALL_SUCCESS=false
+                    return $exit_code
+                fi
+            }
+            
+            # Install just
+            run_step "Install just" "curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin"
+            
+            # Verify just
+            run_step "Verify just" "/usr/local/bin/just --version"
+            
+            # Environment setup
+            run_step "Python version check" "python3 --version"
+            run_step "Node version check" "node --version"
+            
+            # Python environment
+            run_step "Create virtual environment" "python3 -m venv .venv"
+            run_step "Install Python dependencies" "source .venv/bin/activate && pip install -r requirements.txt"
+            
+            # CDK setup
+            run_step "Install CDK" "npm install -g aws-cdk"
+            run_step "CDK version check" "cdk --version"
+            
+            # Validation
+            run_step "CDK synth validation" "source .venv/bin/activate && cdk synth --quiet"
+            
+            # Only deploy on main branch
+            if [ "${WorkflowSource.BranchName}" = "main" ]; then
+                echo "🏗️ Main branch detected - proceeding with deployment"
+                
+                # CDK deploy with detailed error reporting
+                echo "🔄 Running CDK deploy..."
+                if source .venv/bin/activate && cdk deploy --require-approval never --outputs-file outputs.json; then
+                    echo "✅ CDK deploy - SUCCESS"
+                    
+                    # Post-deployment steps
+                    run_step "Extract outputs" "/usr/local/bin/just extract-outputs"
+                    run_step "Test API" "/usr/local/bin/just test-api"
+                    run_step "Create test data" "/usr/local/bin/just create-test-data"
+                    run_step "Print summary" "/usr/local/bin/just print-deployment-summary"
+                    
+                else
+                    echo "❌ CDK deploy - FAILED (exit code: $?)"
+                    echo "CDK deploy error details:"
+                    echo "- Check AWS credentials and permissions"
+                    echo "- Verify CDK bootstrap status"
+                    echo "- Check for resource conflicts"
+                    OVERALL_SUCCESS=false
+                fi
+            else
+                echo "ℹ️ Not on main branch - validation only"
+            fi
+            
+            # Final status
+            echo "📊 PIPELINE SUMMARY"
+            echo "==================="
+            if [ "$OVERALL_SUCCESS" = true ]; then
+                echo "🎉 Pipeline completed successfully"
+                exit 0
+            else
+                echo "❌ Pipeline completed with errors"
+                echo "Check the logs above for specific failure details"
+                exit 1
+            fi
