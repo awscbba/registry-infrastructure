@@ -1,0 +1,130 @@
+Name: Fixed_Pipeline
+SchemaVersion: "1.0"
+
+Triggers:
+  - Type: PUSH
+    Branches:
+      - main
+
+Actions:
+  FixedDeploy:
+    Identifier: aws/build@v1
+    Inputs:
+      Sources:
+        - WorkflowSource
+    Configuration:
+      Steps:
+        - Run: |
+            set +e
+            
+            echo "🚀 Fixed Pipeline - Node.js Version Fix"
+            echo "Branch: ${WorkflowSource.BranchName}"
+            echo "Commit: ${WorkflowSource.CommitId}"
+            
+            OVERALL_SUCCESS=true
+            
+            run_step() {
+                local step_name="$1"
+                local command="$2"
+                echo "🔄 Running: $step_name"
+                
+                if eval "$command"; then
+                    echo "✅ $step_name - SUCCESS"
+                    return 0
+                else
+                    local exit_code=$?
+                    echo "❌ $step_name - FAILED (exit code: $exit_code)"
+                    OVERALL_SUCCESS=false
+                    return $exit_code
+                fi
+            }
+            
+            # Install just
+            run_step "Install just" "curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin"
+            run_step "Verify just" "/usr/local/bin/just --version"
+            
+            # Check current Node version
+            echo "Current Node version: $(node --version)"
+            echo "Current npm version: $(npm --version)"
+            
+            # Install Node.js 18 using NodeSource repository
+            echo "🔄 Installing Node.js 18..."
+            if curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash - && sudo apt-get install -y nodejs; then
+                echo "✅ Node.js 18 installation - SUCCESS"
+                echo "New Node version: $(node --version)"
+                echo "New npm version: $(npm --version)"
+            else
+                echo "❌ Node.js 18 installation failed, trying alternative method..."
+                
+                # Alternative: Use n version manager
+                if sudo npm install -g n && sudo n 18; then
+                    echo "✅ Node.js 18 via n - SUCCESS"
+                    # Reload PATH
+                    export PATH="/usr/local/bin:$PATH"
+                    echo "Node version after n: $(node --version)"
+                else
+                    echo "❌ All Node.js installation methods failed"
+                    OVERALL_SUCCESS=false
+                fi
+            fi
+            
+            # Environment setup
+            run_step "Python version check" "python3 --version"
+            run_step "Final Node version check" "node --version"
+            
+            # Python environment
+            run_step "Create virtual environment" "python3 -m venv .venv"
+            run_step "Install Python dependencies" "source .venv/bin/activate && pip install -r requirements.txt"
+            
+            # Install CDK with newer Node.js
+            echo "🔄 Installing CDK with Node.js 18..."
+            if npm install -g aws-cdk@latest; then
+                echo "✅ CDK installation - SUCCESS"
+            else
+                echo "❌ CDK installation failed, trying with specific version..."
+                if npm install -g aws-cdk@2.100.0; then
+                    echo "✅ CDK installation (v2.100.0) - SUCCESS"
+                else
+                    echo "❌ CDK installation completely failed"
+                    OVERALL_SUCCESS=false
+                fi
+            fi
+            
+            # CDK version check
+            run_step "CDK version check" "cdk --version"
+            
+            # Validation
+            run_step "CDK synth validation" "source .venv/bin/activate && cdk synth --quiet"
+            
+            # Deploy on main branch
+            if [ "${WorkflowSource.BranchName}" = "main" ]; then
+                echo "🏗️ Main branch detected - proceeding with deployment"
+                
+                echo "🔄 Running CDK deploy..."
+                if source .venv/bin/activate && cdk deploy --require-approval never --outputs-file outputs.json; then
+                    echo "✅ CDK deploy - SUCCESS"
+                    
+                    # Post-deployment steps
+                    run_step "Extract outputs" "/usr/local/bin/just extract-outputs"
+                    run_step "Test API" "/usr/local/bin/just test-api"
+                    run_step "Create test data" "/usr/local/bin/just create-test-data"
+                    run_step "Print summary" "/usr/local/bin/just print-deployment-summary"
+                    
+                else
+                    echo "❌ CDK deploy - FAILED (exit code: $?)"
+                    OVERALL_SUCCESS=false
+                fi
+            else
+                echo "ℹ️ Not on main branch - validation only"
+            fi
+            
+            # Final status
+            echo "📊 PIPELINE SUMMARY"
+            echo "==================="
+            if [ "$OVERALL_SUCCESS" = true ]; then
+                echo "🎉 Pipeline completed successfully"
+                exit 0
+            else
+                echo "❌ Pipeline completed with errors"
+                exit 1
+            fi
