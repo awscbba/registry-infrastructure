@@ -70,7 +70,7 @@ def lambda_handler(event, context):
                     'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
                     'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key'
                 },
-                'body': json.dumps({'status': 'healthy', 'service': 'people-register-api'})
+                'body': json.dumps({'status': 'healthy', 'service': 'people-register-api-global'})
             }
         
         elif path == '/people':
@@ -90,10 +90,26 @@ def lambda_handler(event, context):
                 }
             
             elif http_method == 'POST':
-                # Create new person
+                # Create new person - adapted for Bolivia/LATAM
                 body = json.loads(event.get('body', '{}'))
                 person_id = str(uuid.uuid4())
                 now = datetime.utcnow().isoformat()
+                
+                # Address structure for global use (flexible postal code)
+                address = body.get('address', {})
+                if address:
+                    # Clean address structure - flexible for any country
+                    clean_address = {
+                        'street': address.get('street', ''),
+                        'city': address.get('city', ''),
+                        'state': address.get('state', ''),  # State/Province/Department
+                        'country': address.get('country', '')  # No default country
+                    }
+                    # Include postal code if provided (optional globally)
+                    if address.get('postalCode'):
+                        clean_address['postalCode'] = address.get('postalCode')
+                else:
+                    clean_address = {}
                 
                 person = {
                     'id': person_id,
@@ -102,7 +118,7 @@ def lambda_handler(event, context):
                     'email': body.get('email'),
                     'phone': body.get('phone'),
                     'dateOfBirth': body.get('dateOfBirth'),
-                    'address': body.get('address', {}),
+                    'address': clean_address,
                     'createdAt': now,
                     'updatedAt': now
                 }
@@ -157,7 +173,7 @@ def lambda_handler(event, context):
                 }
             
             elif http_method == 'PUT':
-                # Update person
+                # Update person - adapted for Bolivia/LATAM
                 body = json.loads(event.get('body', '{}'))
                 now = datetime.utcnow().isoformat()
                 
@@ -173,15 +189,29 @@ def lambda_handler(event, context):
                         'body': json.dumps({'error': 'Person not found'})
                     }
                 
-                # Update the person
+                # Update the person with clean address structure
                 person = response['Item']
+                
+                # Handle address update for global use
+                if body.get('address'):
+                    address = body.get('address', {})
+                    clean_address = {
+                        'street': address.get('street', ''),
+                        'city': address.get('city', ''),
+                        'state': address.get('state', ''),  # State/Province/Department
+                        'country': address.get('country', '')
+                    }
+                    # Include postal code if provided
+                    if address.get('postalCode'):
+                        clean_address['postalCode'] = address.get('postalCode')
+                    person['address'] = clean_address
+                
                 person.update({
                     'firstName': body.get('firstName', person.get('firstName')),
                     'lastName': body.get('lastName', person.get('lastName')),
                     'email': body.get('email', person.get('email')),
                     'phone': body.get('phone', person.get('phone')),
                     'dateOfBirth': body.get('dateOfBirth', person.get('dateOfBirth')),
-                    'address': body.get('address', person.get('address', {})),
                     'updatedAt': now
                 })
                 
