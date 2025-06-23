@@ -34,6 +34,52 @@ class PeopleRegisterInfrastructureStack(Stack):
             point_in_time_recovery=True,
         )
 
+        # DynamoDB Table for storing projects
+        projects_table = dynamodb.Table(
+            self, "ProjectsTable",
+            table_name="ProjectsTable",
+            partition_key=dynamodb.Attribute(
+                name="id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,
+        )
+
+        # DynamoDB Table for storing subscriptions (many-to-many relationship)
+        subscriptions_table = dynamodb.Table(
+            self, "SubscriptionsTable",
+            table_name="SubscriptionsTable",
+            partition_key=dynamodb.Attribute(
+                name="id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,
+        )
+
+        # Add GSI for querying subscriptions by project
+        subscriptions_table.add_global_secondary_index(
+            index_name="ProjectIndex",
+            partition_key=dynamodb.Attribute(
+                name="projectId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # Add GSI for querying subscriptions by person
+        subscriptions_table.add_global_secondary_index(
+            index_name="PersonIndex",
+            partition_key=dynamodb.Attribute(
+                name="personId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
         # Lambda function for the API - simple approach without bundling
         api_lambda = _lambda.Function(
             self, "PeopleApiFunction",
@@ -278,13 +324,17 @@ def lambda_handler(event, context):
 """),
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
+                "PROJECTS_TABLE_NAME": projects_table.table_name,
+                "SUBSCRIPTIONS_TABLE_NAME": subscriptions_table.table_name,
             },
             timeout=Duration.seconds(30),
             memory_size=512,
         )
 
-        # Grant Lambda permissions to access DynamoDB
+        # Grant Lambda permissions to access DynamoDB tables
         people_table.grant_read_write_data(api_lambda)
+        projects_table.grant_read_write_data(api_lambda)
+        subscriptions_table.grant_read_write_data(api_lambda)
 
         # API Gateway
         api = apigateway.RestApi(
