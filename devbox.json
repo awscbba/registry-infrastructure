@@ -11,7 +11,10 @@
   },
   "shell": {
     "init_hook": [
-      "echo 'Welcome to devbox!' > /dev/null"
+      "echo 'Welcome to the AWS UG Cochabamba!'",
+      "uv venv --python=python@3.13 --clear --prompt=venv",
+      "source .venv/bin/activate",
+      "uv sync"
     ],
     "scripts": {
       "test": [
