@@ -3,8 +3,20 @@ import boto3
 import uuid
 import os
 from datetime import datetime
+from decimal import Decimal
 
 dynamodb = boto3.resource('dynamodb')
+
+# Custom JSON encoder to handle Decimal objects from DynamoDB
+class DecimalEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, Decimal):
+            # Convert decimal to int if it's a whole number, otherwise to float
+            if obj % 1 == 0:
+                return int(obj)
+            else:
+                return float(obj)
+        return super(DecimalEncoder, self).default(obj)
 
 def lambda_handler(event, context):
     print(f"Event: {json.dumps(event)}")
@@ -29,7 +41,7 @@ def lambda_handler(event, context):
             return {
                 'statusCode': 200,
                 'headers': get_cors_headers(),
-                'body': json.dumps({'status': 'healthy', 'service': 'people-register-api-global-with-projects'})
+                'body': json.dumps({'status': 'healthy', 'service': 'people-register-api-global-with-projects'}, cls=DecimalEncoder)
             }
         
         # PEOPLE ENDPOINTS (existing)
@@ -40,7 +52,7 @@ def lambda_handler(event, context):
                 return {
                     'statusCode': 200,
                     'headers': get_cors_headers(),
-                    'body': json.dumps(people)
+                    'body': json.dumps(people, cls=DecimalEncoder)
                 }
             
             elif http_method == 'POST':
@@ -122,7 +134,7 @@ def error_response(status_code, message):
     return {
         'statusCode': status_code,
         'headers': get_cors_headers(),
-        'body': json.dumps({'error': message})
+        'body': json.dumps({'error': message}, cls=DecimalEncoder)
     }
 
 # PEOPLE FUNCTIONS (existing, updated)
@@ -162,7 +174,7 @@ def create_person(people_table, event):
     return {
         'statusCode': 201,
         'headers': get_cors_headers(),
-        'body': json.dumps(person)
+        'body': json.dumps(person, cls=DecimalEncoder)
     }
 
 def get_person(people_table, person_id):
@@ -173,7 +185,7 @@ def get_person(people_table, person_id):
     return {
         'statusCode': 200,
         'headers': get_cors_headers(),
-        'body': json.dumps(response['Item'])
+        'body': json.dumps(response['Item'], cls=DecimalEncoder)
     }
 
 def update_person(people_table, person_id, event):
@@ -213,7 +225,7 @@ def update_person(people_table, person_id, event):
     return {
         'statusCode': 200,
         'headers': get_cors_headers(),
-        'body': json.dumps(person)
+        'body': json.dumps(person, cls=DecimalEncoder)
     }
 
 def delete_person(people_table, person_id):
@@ -238,7 +250,7 @@ def get_projects(projects_table):
     return {
         'statusCode': 200,
         'headers': get_cors_headers(),
-        'body': json.dumps(projects)
+        'body': json.dumps(projects, cls=DecimalEncoder)
     }
 
 def create_project(projects_table, event):
@@ -264,7 +276,7 @@ def create_project(projects_table, event):
     return {
         'statusCode': 201,
         'headers': get_cors_headers(),
-        'body': json.dumps(project)
+        'body': json.dumps(project, cls=DecimalEncoder)
     }
 
 def get_project(projects_table, project_id):
@@ -275,7 +287,7 @@ def get_project(projects_table, project_id):
     return {
         'statusCode': 200,
         'headers': get_cors_headers(),
-        'body': json.dumps(response['Item'])
+        'body': json.dumps(response['Item'], cls=DecimalEncoder)
     }
 
 def update_project(projects_table, project_id, event):
@@ -302,7 +314,7 @@ def update_project(projects_table, project_id, event):
     return {
         'statusCode': 200,
         'headers': get_cors_headers(),
-        'body': json.dumps(project)
+        'body': json.dumps(project, cls=DecimalEncoder)
     }
 
 def delete_project(projects_table, subscriptions_table, project_id):
@@ -338,7 +350,7 @@ def get_subscriptions(subscriptions_table):
     return {
         'statusCode': 200,
         'headers': get_cors_headers(),
-        'body': json.dumps(subscriptions)
+        'body': json.dumps(subscriptions, cls=DecimalEncoder)
     }
 
 def create_subscription(subscriptions_table, event):
@@ -361,7 +373,7 @@ def create_subscription(subscriptions_table, event):
     return {
         'statusCode': 201,
         'headers': get_cors_headers(),
-        'body': json.dumps(subscription)
+        'body': json.dumps(subscription, cls=DecimalEncoder)
     }
 
 def delete_subscription(subscriptions_table, subscription_id):
@@ -399,7 +411,7 @@ def subscribe_person_to_project(subscriptions_table, project_id, person_id, even
     return {
         'statusCode': 201,
         'headers': get_cors_headers(),
-        'body': json.dumps(subscription)
+        'body': json.dumps(subscription, cls=DecimalEncoder)
     }
 
 def unsubscribe_person_from_project(subscriptions_table, project_id, person_id):
@@ -449,7 +461,7 @@ def get_project_subscribers(subscriptions_table, people_table, project_id):
     return {
         'statusCode': 200,
         'headers': get_cors_headers(),
-        'body': json.dumps(subscribers)
+        'body': json.dumps(subscribers, cls=DecimalEncoder)
     }
 
 def get_admin_dashboard(people_table, projects_table, subscriptions_table):
@@ -468,5 +480,5 @@ def get_admin_dashboard(people_table, projects_table, subscriptions_table):
     return {
         'statusCode': 200,
         'headers': get_cors_headers(),
-        'body': json.dumps(dashboard_data)
+        'body': json.dumps(dashboard_data, cls=DecimalEncoder)
     }

@@ -80,248 +80,12 @@ class PeopleRegisterInfrastructureStack(Stack):
             projection_type=dynamodb.ProjectionType.ALL
         )
 
-        # Lambda function for the API - simple approach without bundling
+        # Lambda function for the API - using external file for project management
         api_lambda = _lambda.Function(
             self, "PeopleApiFunction",
-            runtime=_lambda.Runtime.PYTHON_3_11,
-            handler="index.lambda_handler",
-            code=_lambda.Code.from_inline("""
-import json
-import boto3
-import uuid
-import os
-from datetime import datetime
-
-dynamodb = boto3.resource('dynamodb')
-
-def lambda_handler(event, context):
-    print(f"Event: {json.dumps(event)}")
-    
-    # Get table name from environment
-    table_name = os.environ.get('PEOPLE_TABLE_NAME', 'PeopleTable')
-    table = dynamodb.Table(table_name)
-    
-    # Extract HTTP method and path
-    http_method = event.get('httpMethod', 'GET')
-    path = event.get('path', '/')
-    path_parameters = event.get('pathParameters') or {}
-    
-    try:
-        if path == '/health':
-            return {
-                'statusCode': 200,
-                'headers': {
-                    'Content-Type': 'application/json',
-                    'Access-Control-Allow-Origin': '*',
-                    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-                    'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key'
-                },
-                'body': json.dumps({'status': 'healthy', 'service': 'people-register-api-global'})
-            }
-        
-        elif path == '/people':
-            if http_method == 'GET':
-                # List all people
-                response = table.scan()
-                people = response.get('Items', [])
-                return {
-                    'statusCode': 200,
-                    'headers': {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-                        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key'
-                    },
-                    'body': json.dumps(people)
-                }
-            
-            elif http_method == 'POST':
-                # Create new person - adapted for Bolivia/LATAM
-                body = json.loads(event.get('body', '{}'))
-                person_id = str(uuid.uuid4())
-                now = datetime.utcnow().isoformat()
-                
-                # Address structure for global use (flexible postal code)
-                address = body.get('address', {})
-                if address:
-                    # Clean address structure - flexible for any country
-                    clean_address = {
-                        'street': address.get('street', ''),
-                        'city': address.get('city', ''),
-                        'state': address.get('state', ''),  # State/Province/Department
-                        'country': address.get('country', '')  # No default country
-                    }
-                    # Include postal code if provided (optional globally)
-                    if address.get('postalCode'):
-                        clean_address['postalCode'] = address.get('postalCode')
-                else:
-                    clean_address = {}
-                
-                person = {
-                    'id': person_id,
-                    'firstName': body.get('firstName'),
-                    'lastName': body.get('lastName'),
-                    'email': body.get('email'),
-                    'phone': body.get('phone'),
-                    'dateOfBirth': body.get('dateOfBirth'),
-                    'address': clean_address,
-                    'createdAt': now,
-                    'updatedAt': now
-                }
-                
-                table.put_item(Item=person)
-                
-                return {
-                    'statusCode': 201,
-                    'headers': {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-                        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key'
-                    },
-                    'body': json.dumps(person)
-                }
-        
-        elif path.startswith('/people/'):
-            person_id = path_parameters.get('id')
-            if not person_id:
-                return {
-                    'statusCode': 400,
-                    'headers': {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*'
-                    },
-                    'body': json.dumps({'error': 'Person ID is required'})
-                }
-            
-            if http_method == 'GET':
-                # Get person by ID
-                response = table.get_item(Key={'id': person_id})
-                if 'Item' not in response:
-                    return {
-                        'statusCode': 404,
-                        'headers': {
-                            'Content-Type': 'application/json',
-                            'Access-Control-Allow-Origin': '*'
-                        },
-                        'body': json.dumps({'error': 'Person not found'})
-                    }
-                
-                return {
-                    'statusCode': 200,
-                    'headers': {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-                        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key'
-                    },
-                    'body': json.dumps(response['Item'])
-                }
-            
-            elif http_method == 'PUT':
-                # Update person - adapted for Bolivia/LATAM
-                body = json.loads(event.get('body', '{}'))
-                now = datetime.utcnow().isoformat()
-                
-                # Check if person exists
-                response = table.get_item(Key={'id': person_id})
-                if 'Item' not in response:
-                    return {
-                        'statusCode': 404,
-                        'headers': {
-                            'Content-Type': 'application/json',
-                            'Access-Control-Allow-Origin': '*'
-                        },
-                        'body': json.dumps({'error': 'Person not found'})
-                    }
-                
-                # Update the person with clean address structure
-                person = response['Item']
-                
-                # Handle address update for global use
-                if body.get('address'):
-                    address = body.get('address', {})
-                    clean_address = {
-                        'street': address.get('street', ''),
-                        'city': address.get('city', ''),
-                        'state': address.get('state', ''),  # State/Province/Department
-                        'country': address.get('country', '')
-                    }
-                    # Include postal code if provided
-                    if address.get('postalCode'):
-                        clean_address['postalCode'] = address.get('postalCode')
-                    person['address'] = clean_address
-                
-                person.update({
-                    'firstName': body.get('firstName', person.get('firstName')),
-                    'lastName': body.get('lastName', person.get('lastName')),
-                    'email': body.get('email', person.get('email')),
-                    'phone': body.get('phone', person.get('phone')),
-                    'dateOfBirth': body.get('dateOfBirth', person.get('dateOfBirth')),
-                    'updatedAt': now
-                })
-                
-                table.put_item(Item=person)
-                
-                return {
-                    'statusCode': 200,
-                    'headers': {
-                        'Content-Type': 'application/json',
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-                        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key'
-                    },
-                    'body': json.dumps(person)
-                }
-            
-            elif http_method == 'DELETE':
-                # Delete person
-                response = table.delete_item(
-                    Key={'id': person_id},
-                    ReturnValues='ALL_OLD'
-                )
-                
-                if 'Attributes' not in response:
-                    return {
-                        'statusCode': 404,
-                        'headers': {
-                            'Content-Type': 'application/json',
-                            'Access-Control-Allow-Origin': '*'
-                        },
-                        'body': json.dumps({'error': 'Person not found'})
-                    }
-                
-                return {
-                    'statusCode': 204,
-                    'headers': {
-                        'Access-Control-Allow-Origin': '*',
-                        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
-                        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key'
-                    },
-                    'body': ''
-                }
-        
-        # Default response for unmatched routes
-        return {
-            'statusCode': 404,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({'error': 'Route not found'})
-        }
-        
-    except Exception as e:
-        print(f"Error: {str(e)}")
-        return {
-            'statusCode': 500,
-            'headers': {
-                'Content-Type': 'application/json',
-                'Access-Control-Allow-Origin': '*'
-            },
-            'body': json.dumps({'error': 'Internal server error'})
-        }
-"""),
+            runtime=_lambda.Runtime.PYTHON_3_9,
+            handler="api_handler.lambda_handler",
+            code=_lambda.Code.from_asset("lambda"),
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "PROJECTS_TABLE_NAME": projects_table.table_name,
@@ -369,6 +133,44 @@ def lambda_handler(event, context):
         person_resource.add_method("GET", lambda_integration)  # Get person
         person_resource.add_method("PUT", lambda_integration)  # Update person
         person_resource.add_method("DELETE", lambda_integration)  # Delete person
+
+        # Projects resource (new)
+        projects_resource = api.root.add_resource("projects")
+        projects_resource.add_method("GET", lambda_integration)  # List projects
+        projects_resource.add_method("POST", lambda_integration)  # Create project
+
+        # Individual project resource
+        project_resource = projects_resource.add_resource("{id}")
+        project_resource.add_method("GET", lambda_integration)  # Get project
+        project_resource.add_method("PUT", lambda_integration)  # Update project
+        project_resource.add_method("DELETE", lambda_integration)  # Delete project
+
+        # Project subscribers
+        subscribers_resource = project_resource.add_resource("subscribers")
+        subscribers_resource.add_method("GET", lambda_integration)  # Get project subscribers
+
+        # Project subscription management
+        subscribe_resource = project_resource.add_resource("subscribe")
+        subscribe_person_resource = subscribe_resource.add_resource("{personId}")
+        subscribe_person_resource.add_method("POST", lambda_integration)  # Subscribe person to project
+
+        unsubscribe_resource = project_resource.add_resource("unsubscribe")
+        unsubscribe_person_resource = unsubscribe_resource.add_resource("{personId}")
+        unsubscribe_person_resource.add_method("DELETE", lambda_integration)  # Unsubscribe person from project
+
+        # Subscriptions resource (new)
+        subscriptions_resource = api.root.add_resource("subscriptions")
+        subscriptions_resource.add_method("GET", lambda_integration)  # List subscriptions
+        subscriptions_resource.add_method("POST", lambda_integration)  # Create subscription
+
+        # Individual subscription resource
+        subscription_resource = subscriptions_resource.add_resource("{id}")
+        subscription_resource.add_method("DELETE", lambda_integration)  # Delete subscription
+
+        # Admin resource (new)
+        admin_resource = api.root.add_resource("admin")
+        dashboard_resource = admin_resource.add_resource("dashboard")
+        dashboard_resource.add_method("GET", lambda_integration)  # Get admin dashboard
 
         # S3 Bucket for hosting the frontend
         frontend_bucket = s3.Bucket(
