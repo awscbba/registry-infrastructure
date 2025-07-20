@@ -32,6 +32,30 @@ def hash_password(password):
         'salt': salt.decode('utf-8')
     }
 
+def validate_password_strength(password):
+    """Validate password meets security requirements"""
+    errors = []
+    
+    if len(password) < 8:
+        errors.append("Password must be at least 8 characters long")
+    
+    if not any(c.isupper() for c in password):
+        errors.append("Password must contain at least one uppercase letter")
+    
+    if not any(c.islower() for c in password):
+        errors.append("Password must contain at least one lowercase letter")
+    
+    if not any(c.isdigit() for c in password):
+        errors.append("Password must contain at least one number")
+    
+    if not any(c in "!@#$%^&*()_+-=[]{}|;:,.<>?" for c in password):
+        errors.append("Password must contain at least one special character")
+    
+    return {
+        'valid': len(errors) == 0,
+        'errors': errors
+    }
+
 def verify_password(password, stored_hash):
     """Verify a password against stored hash"""
     return bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
@@ -303,6 +327,250 @@ def send_password_changed_email(to_email, first_name, change_time, ip_address=No
             'success': False,
             'message': f'Failed to send email: {str(e)}'
         }
+
+# Authentication and login functions
+def login_user(people_table, audit_logs_table, event):
+    """Authenticate user and handle first-time login detection"""
+    try:
+        body = json.loads(event.get('body', '{}'))
+        email = body.get('email', '').strip().lower()
+        password = body.get('password', '')
+        
+        if not email or not password:
+            return error_response(400, 'Email and password are required')
+        
+        # Get client information
+        client_ip = get_client_ip(event)
+        user_agent = get_user_agent(event)
+        
+        # Find person by email
+        person = get_person_by_email(people_table, email)
+        if not person:
+            # Log failed login attempt
+            create_audit_log(
+                audit_logs_table,
+                'unknown',
+                'LOGIN_FAILED',
+                False,
+                {'email': email, 'reason': 'user_not_found'},
+                client_ip,
+                user_agent
+            )
+            return error_response(401, 'Invalid email or password')
+        
+        # Check if account is locked
+        if person.get('accountLockedUntil'):
+            locked_until = datetime.fromisoformat(person['accountLockedUntil'].replace('Z', '+00:00'))
+            if datetime.utcnow() < locked_until.replace(tzinfo=None):
+                return error_response(423, 'Account is temporarily locked due to too many failed login attempts')
+        
+        # Verify password
+        stored_hash = person.get('passwordHash')
+        if not stored_hash or not verify_password(password, stored_hash):
+            # Increment failed login attempts
+            failed_attempts = person.get('failedLoginAttempts', 0) + 1
+            update_expression = 'SET failedLoginAttempts = :attempts'
+            expression_values = {':attempts': failed_attempts}
+            
+            # Lock account after 5 failed attempts
+            if failed_attempts >= 5:
+                locked_until = (datetime.utcnow() + timedelta(minutes=15)).isoformat()
+                update_expression += ', accountLockedUntil = :locked_until'
+                expression_values[':locked_until'] = locked_until
+            
+            people_table.update_item(
+                Key={'id': person['id']},
+                UpdateExpression=update_expression,
+                ExpressionAttributeValues=expression_values
+            )
+            
+            # Log failed login attempt
+            create_audit_log(
+                audit_logs_table,
+                person['id'],
+                'LOGIN_FAILED',
+                False,
+                {'email': email, 'reason': 'invalid_password', 'failed_attempts': failed_attempts},
+                client_ip,
+                user_agent
+            )
+            
+            return error_response(401, 'Invalid email or password')
+        
+        # Successful login - reset failed attempts and update last login
+        people_table.update_item(
+            Key={'id': person['id']},
+            UpdateExpression='SET failedLoginAttempts = :zero, lastLoginAt = :timestamp REMOVE accountLockedUntil',
+            ExpressionAttributeValues={
+                ':zero': 0,
+                ':timestamp': datetime.utcnow().isoformat()
+            }
+        )
+        
+        # Check if this is first-time login (requirePasswordChange flag)
+        require_password_change = person.get('requirePasswordChange', False)
+        
+        # Generate JWT token
+        token_payload = {
+            'user_id': person['id'],
+            'email': person['email'],
+            'first_name': person.get('firstName', ''),
+            'last_name': person.get('lastName', ''),
+            'require_password_change': require_password_change,
+            'exp': (datetime.utcnow() + timedelta(hours=24)).timestamp(),
+            'iat': datetime.utcnow().timestamp()
+        }
+        
+        # For demo purposes, we'll use a simple token (in production, use proper JWT)
+        import base64
+        token = base64.b64encode(json.dumps(token_payload).encode()).decode()
+        
+        # Log successful login
+        create_audit_log(
+            audit_logs_table,
+            person['id'],
+            'LOGIN_SUCCESS',
+            True,
+            {'email': email, 'first_time_login': require_password_change},
+            client_ip,
+            user_agent
+        )
+        
+        # Prepare response
+        response_data = {
+            'success': True,
+            'message': 'Login successful',
+            'token': token,
+            'user': {
+                'id': person['id'],
+                'email': person['email'],
+                'firstName': person.get('firstName', ''),
+                'lastName': person.get('lastName', ''),
+                'requirePasswordChange': require_password_change
+            }
+        }
+        
+        # Add first-time login flag if applicable
+        if require_password_change:
+            response_data['requirePasswordChange'] = True
+            response_data['message'] = 'Login successful. You must change your password before continuing.'
+        
+        return {
+            'statusCode': 200,
+            'headers': get_cors_headers(),
+            'body': json.dumps(response_data)
+        }
+        
+    except Exception as e:
+        print(f"Error during login: {str(e)}")
+        return error_response(500, 'Internal server error')
+
+def change_password_first_time(people_table, audit_logs_table, event):
+    """Handle first-time password change for new users"""
+    try:
+        body = json.loads(event.get('body', '{}'))
+        current_password = body.get('currentPassword', '')
+        new_password = body.get('newPassword', '')
+        confirm_password = body.get('confirmPassword', '')
+        user_id = body.get('userId', '')
+        
+        if not all([current_password, new_password, confirm_password, user_id]):
+            return error_response(400, 'All password fields and user ID are required')
+        
+        if new_password != confirm_password:
+            return error_response(400, 'New password and confirmation do not match')
+        
+        # Validate new password strength
+        password_validation = validate_password_strength(new_password)
+        if not password_validation['valid']:
+            return error_response(400, f"Password does not meet requirements: {', '.join(password_validation['errors'])}")
+        
+        # Get client information
+        client_ip = get_client_ip(event)
+        user_agent = get_user_agent(event)
+        
+        # Get person record
+        try:
+            response = people_table.get_item(Key={'id': user_id})
+            person = response.get('Item')
+            if not person:
+                return error_response(404, 'User not found')
+        except Exception as e:
+            print(f"Error getting person: {str(e)}")
+            return error_response(500, 'Error retrieving user information')
+        
+        # Verify current password
+        stored_hash = person.get('passwordHash')
+        if not stored_hash or not verify_password(current_password, stored_hash):
+            # Log failed password change attempt
+            create_audit_log(
+                audit_logs_table,
+                user_id,
+                'PASSWORD_CHANGE_FAILED',
+                False,
+                {'reason': 'invalid_current_password'},
+                client_ip,
+                user_agent
+            )
+            return error_response(401, 'Current password is incorrect')
+        
+        # Check if user is required to change password
+        if not person.get('requirePasswordChange', False):
+            return error_response(400, 'Password change is not required for this user')
+        
+        # Hash new password
+        password_data = hash_password(new_password)
+        
+        # Update person's password and remove requirePasswordChange flag
+        people_table.update_item(
+            Key={'id': user_id},
+            UpdateExpression='SET passwordHash = :hash, passwordSalt = :salt, lastPasswordChange = :timestamp, requirePasswordChange = :require_change',
+            ExpressionAttributeValues={
+                ':hash': password_data['hash'],
+                ':salt': password_data['salt'],
+                ':timestamp': datetime.utcnow().isoformat(),
+                ':require_change': False
+            }
+        )
+        
+        # Log successful password change
+        create_audit_log(
+            audit_logs_table,
+            user_id,
+            'FIRST_TIME_PASSWORD_CHANGE',
+            True,
+            {'email': person['email']},
+            client_ip,
+            user_agent
+        )
+        
+        # Send password changed confirmation email
+        email_result = send_password_changed_email(
+            person['email'],
+            person.get('firstName', 'User'),
+            datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
+            client_ip
+        )
+        
+        if email_result['success']:
+            print(f"Password changed confirmation email sent to: {person['email']}")
+        else:
+            print(f"Failed to send password changed email: {email_result['message']}")
+        
+        print(f"First-time password change completed for user: {user_id}")
+        
+        return {
+            'statusCode': 200,
+            'headers': get_cors_headers(),
+            'body': json.dumps({
+                'success': True,
+                'message': 'Password has been successfully changed. You can now access your account normally.'
+            })
+        }
+        
+    except Exception as e:
+        print(f"Error changing password: {str(e)}")
+        return error_response(500, 'Internal server error')
 
 def preview_password_reset_email(event):
     """Preview password reset email content for testing"""
@@ -766,6 +1034,15 @@ def lambda_handler(event, context):
             subscription_id = path_parameters.get('id')
             if http_method == 'DELETE':
                 return delete_subscription(subscriptions_table, subscription_id)
+        
+        # AUTHENTICATION ENDPOINTS
+        elif path == '/auth/login':
+            if http_method == 'POST':
+                return login_user(people_table, audit_logs_table, event)
+        
+        elif path == '/auth/change-password-first-time':
+            if http_method == 'POST':
+                return change_password_first_time(people_table, audit_logs_table, event)
         
         # PASSWORD RESET ENDPOINTS (simplified routing)
         elif path == '/auth/password-reset':

@@ -280,6 +280,14 @@ class PeopleRegisterInfrastructureStack(Stack):
         # Authentication resource (new) - simplified routing
         auth_resource = api.root.add_resource("auth")
         
+        # Login endpoint
+        login_resource = auth_resource.add_resource("login")
+        login_resource.add_method("POST", lambda_integration)  # User login
+        
+        # First-time password change endpoint
+        change_password_first_time_resource = auth_resource.add_resource("change-password-first-time")
+        change_password_first_time_resource.add_method("POST", lambda_integration)  # First-time password change
+        
         # Single password-reset endpoint that handles all operations via HTTP method and body
         password_reset_resource = auth_resource.add_resource("password-reset")
         password_reset_resource.add_method("POST", lambda_integration)  # All password reset operations
