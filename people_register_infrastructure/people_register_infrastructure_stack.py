@@ -8,6 +8,7 @@ from aws_cdk import (
     aws_cloudfront_origins as origins,
     aws_s3_deployment as s3deploy,
     aws_iam as iam,
+    aws_ses as ses,
     Duration,
     RemovalPolicy,
     CfnOutput,
@@ -149,6 +150,15 @@ class PeopleRegisterInfrastructureStack(Stack):
             projection_type=dynamodb.ProjectionType.ALL
         )
 
+        # AWS SES Configuration for Email Services
+        # Note: For development, we'll rely on manual SES setup
+        # In production, you would verify your domain and email addresses through the AWS Console
+        
+        # For now, we'll skip creating SES resources via CDK and rely on:
+        # 1. Manual email verification in SES console
+        # 2. Lambda permissions to send emails
+        # 3. Environment variables for configuration
+
         # Lambda function for the API - using external file for project management
         api_lambda = _lambda.Function(
             self, "PeopleApiFunction",
@@ -161,6 +171,8 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "SUBSCRIPTIONS_TABLE_NAME": subscriptions_table.table_name,
                 "PASSWORD_RESET_TOKENS_TABLE_NAME": password_reset_tokens_table.table_name,
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
+                "SES_FROM_EMAIL": "noreply@people-register.local",  # Replace with your verified email
+                "FRONTEND_URL": "https://d28z2il3z2vmpc.cloudfront.net",  # Will be updated after CloudFront creation
             },
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -172,6 +184,22 @@ class PeopleRegisterInfrastructureStack(Stack):
         subscriptions_table.grant_read_write_data(api_lambda)
         password_reset_tokens_table.grant_read_write_data(api_lambda)
         audit_logs_table.grant_read_write_data(api_lambda)
+        
+        # Grant Lambda permissions to send emails via SES
+        api_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ses:SendEmail",
+                    "ses:SendRawEmail",
+                    "ses:SendTemplatedEmail",
+                    "ses:GetSendQuota",
+                    "ses:GetSendStatistics",
+                    "ses:GetAccountSendingEnabled"
+                ],
+                resources=["*"]  # In production, restrict to specific SES resources
+            )
+        )
 
         # API Gateway
         api = apigateway.RestApi(

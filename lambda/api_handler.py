@@ -2,13 +2,14 @@ import json
 import boto3
 import uuid
 import os
-# import bcrypt  # Temporarily disabled
+import bcrypt  # Re-enabled with Linux-compatible version
 from datetime import datetime, timedelta
 from decimal import Decimal
 import secrets
 import string
 
 dynamodb = boto3.resource('dynamodb')
+ses_client = boto3.client('ses')
 
 # Custom JSON encoder to handle Decimal objects from DynamoDB
 class DecimalEncoder(json.JSONEncoder):
@@ -21,22 +22,19 @@ class DecimalEncoder(json.JSONEncoder):
                 return float(obj)
         return super(DecimalEncoder, self).default(obj)
 
-# Password utility functions (simplified without bcrypt for now)
+# Password utility functions
 def hash_password(password):
-    """Hash a password using simple hashing (TEMPORARY - replace with bcrypt)"""
-    import hashlib
-    salt = secrets.token_hex(16)
-    password_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    """Hash a password using bcrypt with salt"""
+    salt = bcrypt.gensalt()
+    password_hash = bcrypt.hashpw(password.encode('utf-8'), salt)
     return {
-        'hash': password_hash.hex(),
-        'salt': salt
+        'hash': password_hash.decode('utf-8'),
+        'salt': salt.decode('utf-8')
     }
 
 def verify_password(password, stored_hash):
-    """Verify a password against stored hash (TEMPORARY - replace with bcrypt)"""
-    import hashlib
-    # For now, just return True for testing
-    return True
+    """Verify a password against stored hash"""
+    return bcrypt.checkpw(password.encode('utf-8'), stored_hash.encode('utf-8'))
 
 def validate_password_policy(password):
     """Validate password meets security requirements"""
@@ -109,7 +107,273 @@ def get_person_by_email(people_table, email):
         print(f"Error getting person by email: {str(e)}")
         return None
 
-def get_client_ip(event):
+# Email utility functions
+def send_password_reset_email(to_email, first_name, reset_token):
+    """Send password reset email via AWS SES"""
+    try:
+        frontend_url = os.environ.get('FRONTEND_URL', 'https://d28z2il3z2vmpc.cloudfront.net')
+        from_email = os.environ.get('SES_FROM_EMAIL', 'noreply@people-register.local')
+        reset_link = f"{frontend_url}/reset-password?token={reset_token}"
+        
+        # HTML email body
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+                .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }}
+                .button {{ display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }}
+                .warning {{ background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🔐 Password Reset Request</h1>
+                </div>
+                <div class="content">
+                    <h2>Hello {first_name},</h2>
+                    <p>We received a request to reset your password for your People Register account.</p>
+                    <div style="text-align: center;">
+                        <a href="{reset_link}" class="button">Reset My Password</a>
+                    </div>
+                    <div class="warning">
+                        <strong>⚠️ Important:</strong>
+                        <ul>
+                            <li>This link will expire in 1 hour</li>
+                            <li>This link can only be used once</li>
+                            <li>If you didn't request this reset, please ignore this email</li>
+                        </ul>
+                    </div>
+                    <p>If the button doesn't work, copy this link: {reset_link}</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Plain text email body
+        text_body = f"""
+        Password Reset Request - People Register
+        
+        Hello {first_name},
+        
+        We received a request to reset your password for your People Register account.
+        
+        To reset your password, please visit this link:
+        {reset_link}
+        
+        IMPORTANT:
+        - This link will expire in 1 hour
+        - This link can only be used once
+        - If you didn't request this reset, please ignore this email
+        
+        © 2024 People Register. All rights reserved.
+        """
+        
+        # Send email via SES
+        response = ses_client.send_email(
+            Source=from_email,  # Use just the email address, not the formatted name
+            Destination={'ToAddresses': [to_email]},
+            Message={
+                'Subject': {
+                    'Data': 'Reset Your Password - People Register',
+                    'Charset': 'UTF-8'
+                },
+                'Body': {
+                    'Html': {
+                        'Data': html_body,
+                        'Charset': 'UTF-8'
+                    },
+                    'Text': {
+                        'Data': text_body,
+                        'Charset': 'UTF-8'
+                    }
+                }
+            }
+        )
+        
+        return {
+            'success': True,
+            'message_id': response.get('MessageId'),
+            'message': 'Password reset email sent successfully'
+        }
+        
+    except Exception as e:
+        print(f"Error sending password reset email: {str(e)}")
+        return {
+            'success': False,
+            'message': f'Failed to send email: {str(e)}'
+        }
+
+def send_password_changed_email(to_email, first_name, change_time, ip_address=None):
+    """Send password changed confirmation email via AWS SES"""
+    try:
+        from_email = os.environ.get('SES_FROM_EMAIL', 'noreply@people-register.local')
+        
+        # HTML email body
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #00b894 0%, #00a085 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+                .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }}
+                .success {{ background: #d4edda; border: 1px solid #c3e6cb; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>✅ Password Changed Successfully</h1>
+                </div>
+                <div class="content">
+                    <h2>Hello {first_name},</h2>
+                    <div class="success">
+                        <strong>✅ Your password has been successfully changed!</strong>
+                    </div>
+                    <p>This email confirms that your People Register account password was changed on {change_time}.</p>
+                    <p><strong>Change Details:</strong></p>
+                    <ul>
+                        <li>Date & Time: {change_time}</li>
+                        <li>IP Address: {ip_address or 'Not available'}</li>
+                    </ul>
+                    <p>If you did NOT make this change, please contact our support team immediately.</p>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        # Plain text email body
+        text_body = f"""
+        Password Changed Successfully - People Register
+        
+        Hello {first_name},
+        
+        This email confirms that your People Register account password was changed on {change_time}.
+        
+        Change Details:
+        - Date & Time: {change_time}
+        - IP Address: {ip_address or 'Not available'}
+        
+        If you did NOT make this change, please contact our support team immediately.
+        
+        © 2024 People Register. All rights reserved.
+        """
+        
+        # Send email via SES
+        response = ses_client.send_email(
+            Source=from_email,  # Use just the email address, not the formatted name
+            Destination={'ToAddresses': [to_email]},
+            Message={
+                'Subject': {
+                    'Data': 'Password Changed - People Register',
+                    'Charset': 'UTF-8'
+                },
+                'Body': {
+                    'Html': {
+                        'Data': html_body,
+                        'Charset': 'UTF-8'
+                    },
+                    'Text': {
+                        'Data': text_body,
+                        'Charset': 'UTF-8'
+                    }
+                }
+            }
+        )
+        
+        return {
+            'success': True,
+            'message_id': response.get('MessageId'),
+            'message': 'Password changed confirmation email sent successfully'
+        }
+        
+    except Exception as e:
+        print(f"Error sending password changed email: {str(e)}")
+        return {
+            'success': False,
+            'message': f'Failed to send email: {str(e)}'
+        }
+
+def preview_password_reset_email(event):
+    """Preview password reset email content for testing"""
+    try:
+        query_params = event.get('queryStringParameters') or {}
+        email = query_params.get('email', 'test@example.com')
+        first_name = query_params.get('firstName', 'Test User')
+        reset_token = query_params.get('token', 'sample-reset-token-123')
+        
+        frontend_url = os.environ.get('FRONTEND_URL', 'https://d28z2il3z2vmpc.cloudfront.net')
+        reset_link = f"{frontend_url}/reset-password?token={reset_token}"
+        
+        # Generate email content
+        html_body = f"""
+        <!DOCTYPE html>
+        <html>
+        <head>
+            <meta charset="utf-8">
+            <style>
+                body {{ font-family: Arial, sans-serif; line-height: 1.6; color: #333; }}
+                .container {{ max-width: 600px; margin: 0 auto; padding: 20px; }}
+                .header {{ background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); color: white; padding: 30px; text-align: center; border-radius: 8px 8px 0 0; }}
+                .content {{ background: #f9f9f9; padding: 30px; border-radius: 0 0 8px 8px; }}
+                .button {{ display: inline-block; background: #667eea; color: white; padding: 12px 30px; text-decoration: none; border-radius: 5px; margin: 20px 0; }}
+                .warning {{ background: #fff3cd; border: 1px solid #ffeaa7; padding: 15px; border-radius: 5px; margin: 20px 0; }}
+            </style>
+        </head>
+        <body>
+            <div class="container">
+                <div class="header">
+                    <h1>🔐 Password Reset Request</h1>
+                </div>
+                <div class="content">
+                    <h2>Hello {first_name},</h2>
+                    <p>We received a request to reset your password for your People Register account.</p>
+                    <div style="text-align: center;">
+                        <a href="{reset_link}" class="button">Reset My Password</a>
+                    </div>
+                    <div class="warning">
+                        <strong>⚠️ Important:</strong>
+                        <ul>
+                            <li>This link will expire in 1 hour</li>
+                            <li>This link can only be used once</li>
+                            <li>If you didn't request this reset, please ignore this email</li>
+                        </ul>
+                    </div>
+                    <p>If the button doesn't work, copy this link: {reset_link}</p>
+                    <p><strong>Email Details:</strong></p>
+                    <ul>
+                        <li>To: {email}</li>
+                        <li>Subject: Reset Your Password - People Register</li>
+                        <li>Reset Token: {reset_token}</li>
+                    </ul>
+                </div>
+            </div>
+        </body>
+        </html>
+        """
+        
+        return {
+            'statusCode': 200,
+            'headers': {
+                **get_cors_headers(),
+                'Content-Type': 'text/html'
+            },
+            'body': html_body
+        }
+        
+    except Exception as e:
+        print(f"Error previewing email: {str(e)}")
+        return error_response(500, 'Internal server error')
     """Extract client IP from event"""
     headers = event.get('headers', {})
     
@@ -180,6 +444,18 @@ def initiate_password_reset(people_table, password_reset_tokens_table, audit_log
                 client_ip,
                 user_agent
             )
+            
+            # Send password reset email
+            email_result = send_password_reset_email(
+                email, 
+                person.get('firstName', 'User'), 
+                reset_token
+            )
+            
+            if email_result['success']:
+                print(f"Password reset email sent successfully to: {email}")
+            else:
+                print(f"Failed to send password reset email: {email_result['message']}")
             
             print(f"Password reset initiated for email: {email}")
         
@@ -328,6 +604,19 @@ def reset_password_with_token(people_table, password_reset_tokens_table, audit_l
             client_ip,
             user_agent
         )
+        
+        # Send password changed confirmation email
+        email_result = send_password_changed_email(
+            person['email'],
+            person.get('firstName', 'User'),
+            datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
+            client_ip
+        )
+        
+        if email_result['success']:
+            print(f"Password changed confirmation email sent to: {person['email']}")
+        else:
+            print(f"Failed to send password changed email: {email_result['message']}")
         
         print(f"Password reset completed for person: {person['id']}")
         
@@ -504,6 +793,11 @@ def lambda_handler(event, context):
         elif path == '/admin/password-reset':
             if http_method == 'POST':
                 return cleanup_expired_tokens(password_reset_tokens_table)
+        
+        # EMAIL TESTING ENDPOINTS
+        elif path == '/test/email-preview':
+            if http_method == 'GET':
+                return preview_password_reset_email(event)
         
         # ADMIN ENDPOINTS (existing)
         elif path == '/admin/dashboard':
