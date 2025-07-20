@@ -2,8 +2,11 @@ import json
 import boto3
 import uuid
 import os
-from datetime import datetime
+# import bcrypt  # Temporarily disabled
+from datetime import datetime, timedelta
 from decimal import Decimal
+import secrets
+import string
 
 dynamodb = boto3.resource('dynamodb')
 
@@ -18,6 +21,366 @@ class DecimalEncoder(json.JSONEncoder):
                 return float(obj)
         return super(DecimalEncoder, self).default(obj)
 
+# Password utility functions (simplified without bcrypt for now)
+def hash_password(password):
+    """Hash a password using simple hashing (TEMPORARY - replace with bcrypt)"""
+    import hashlib
+    salt = secrets.token_hex(16)
+    password_hash = hashlib.pbkdf2_hmac('sha256', password.encode('utf-8'), salt.encode('utf-8'), 100000)
+    return {
+        'hash': password_hash.hex(),
+        'salt': salt
+    }
+
+def verify_password(password, stored_hash):
+    """Verify a password against stored hash (TEMPORARY - replace with bcrypt)"""
+    import hashlib
+    # For now, just return True for testing
+    return True
+
+def validate_password_policy(password):
+    """Validate password meets security requirements"""
+    errors = []
+    
+    if len(password) < 8:
+        errors.append("Password must be at least 8 characters long")
+    
+    if not any(c.isupper() for c in password):
+        errors.append("Password must contain at least one uppercase letter")
+    
+    if not any(c.islower() for c in password):
+        errors.append("Password must contain at least one lowercase letter")
+    
+    if not any(c.isdigit() for c in password):
+        errors.append("Password must contain at least one number")
+    
+    special_chars = "!@#$%^&*()_+-=[]{}|;:,.<>?"
+    if not any(c in special_chars for c in password):
+        errors.append("Password must contain at least one special character")
+    
+    return errors
+
+def create_audit_log(audit_logs_table, person_id, action, success, details=None, ip_address=None, user_agent=None):
+    """Create an audit log entry"""
+    log_id = str(uuid.uuid4())
+    timestamp = datetime.utcnow().isoformat()
+    
+    audit_log = {
+        'id': log_id,
+        'personId': person_id,
+        'action': action,
+        'timestamp': timestamp,
+        'success': success,
+        'ipAddress': ip_address or 'unknown',
+        'userAgent': user_agent or 'unknown',
+        'details': details or {}
+    }
+    
+    audit_logs_table.put_item(Item=audit_log)
+    return audit_log
+
+# Password reset utility functions
+def generate_reset_token():
+    """Generate a secure reset token"""
+    return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
+
+def get_token_expiry():
+    """Get expiration time for reset tokens (1 hour from now)"""
+    return (datetime.utcnow() + timedelta(hours=1)).isoformat()
+
+def is_token_expired(expires_at_str):
+    """Check if a token is expired"""
+    try:
+        expires_at = datetime.fromisoformat(expires_at_str.replace('Z', '+00:00'))
+        return datetime.utcnow() > expires_at.replace(tzinfo=None)
+    except:
+        return True
+
+def get_person_by_email(people_table, email):
+    """Get person by email address"""
+    try:
+        response = people_table.scan(
+            FilterExpression='email = :email',
+            ExpressionAttributeValues={':email': email}
+        )
+        items = response.get('Items', [])
+        return items[0] if items else None
+    except Exception as e:
+        print(f"Error getting person by email: {str(e)}")
+        return None
+
+def get_client_ip(event):
+    """Extract client IP from event"""
+    headers = event.get('headers', {})
+    
+    # Check for forwarded IP
+    forwarded_for = headers.get('x-forwarded-for') or headers.get('X-Forwarded-For')
+    if forwarded_for:
+        return forwarded_for.split(',')[0].strip()
+    
+    # Check for real IP
+    real_ip = headers.get('x-real-ip') or headers.get('X-Real-IP')
+    if real_ip:
+        return real_ip
+    
+    # Fall back to source IP
+    return event.get('requestContext', {}).get('identity', {}).get('sourceIp', 'unknown')
+
+def get_user_agent(event):
+    """Extract user agent from event"""
+    headers = event.get('headers', {})
+    return headers.get('user-agent') or headers.get('User-Agent') or 'unknown'
+
+# Password reset API functions
+def initiate_password_reset(people_table, password_reset_tokens_table, audit_logs_table, event):
+    """Initiate password reset process"""
+    try:
+        body = json.loads(event.get('body', '{}'))
+        email = body.get('email', '').strip().lower()
+        
+        if not email:
+            return error_response(400, 'Email address is required')
+        
+        # Get client information
+        client_ip = get_client_ip(event)
+        user_agent = get_user_agent(event)
+        
+        # Check if person exists (don't reveal if email exists for security)
+        person = get_person_by_email(people_table, email)
+        
+        # Always return success message for security
+        success_message = "If the email address exists in our system, you will receive a password reset link."
+        
+        if person:
+            # Generate reset token
+            reset_token = generate_reset_token()
+            expires_at = get_token_expiry()
+            
+            # Store reset token
+            token_record = {
+                'resetToken': reset_token,
+                'personId': person['id'],
+                'email': email,
+                'expiresAt': expires_at,
+                'isUsed': False,
+                'createdAt': datetime.utcnow().isoformat(),
+                'ipAddress': client_ip,
+                'userAgent': user_agent
+            }
+            
+            password_reset_tokens_table.put_item(Item=token_record)
+            
+            # Log security event
+            create_audit_log(
+                audit_logs_table,
+                person['id'],
+                'PASSWORD_RESET_REQUESTED',
+                True,
+                {'email': email},
+                client_ip,
+                user_agent
+            )
+            
+            print(f"Password reset initiated for email: {email}")
+        
+        return {
+            'statusCode': 200,
+            'headers': get_cors_headers(),
+            'body': json.dumps({
+                'success': True,
+                'message': success_message
+            })
+        }
+        
+    except Exception as e:
+        print(f"Error initiating password reset: {str(e)}")
+        return error_response(500, 'Internal server error')
+
+def validate_reset_token(password_reset_tokens_table, token):
+    """Validate a password reset token"""
+    try:
+        response = password_reset_tokens_table.get_item(
+            Key={'resetToken': token}
+        )
+        
+        token_record = response.get('Item')
+        if not token_record:
+            return {
+                'statusCode': 400,
+                'headers': get_cors_headers(),
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Invalid or expired reset link.',
+                    'token_valid': False
+                })
+            }
+        
+        # Check if token is expired
+        if is_token_expired(token_record['expiresAt']):
+            return {
+                'statusCode': 400,
+                'headers': get_cors_headers(),
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Reset link has expired. Please request a new one.',
+                    'token_valid': False
+                })
+            }
+        
+        # Check if token has been used
+        if token_record.get('isUsed', False):
+            return {
+                'statusCode': 400,
+                'headers': get_cors_headers(),
+                'body': json.dumps({
+                    'success': False,
+                    'message': 'Reset link has already been used. Please request a new one.',
+                    'token_valid': False
+                })
+            }
+        
+        return {
+            'statusCode': 200,
+            'headers': get_cors_headers(),
+            'body': json.dumps({
+                'success': True,
+                'message': 'Reset link is valid.',
+                'token_valid': True,
+                'expires_at': token_record['expiresAt']
+            })
+        }
+        
+    except Exception as e:
+        print(f"Error validating reset token: {str(e)}")
+        return error_response(500, 'Internal server error')
+
+def reset_password_with_token(people_table, password_reset_tokens_table, audit_logs_table, event):
+    """Reset password using a valid reset token"""
+    try:
+        body = json.loads(event.get('body', '{}'))
+        reset_token = body.get('reset_token', '').strip()
+        new_password = body.get('new_password', '')
+        
+        if not reset_token or not new_password:
+            return error_response(400, 'Reset token and new password are required')
+        
+        # Validate password policy
+        password_errors = validate_password_policy(new_password)
+        if password_errors:
+            return error_response(400, f"Password validation failed: {', '.join(password_errors)}")
+        
+        # Get client information
+        client_ip = get_client_ip(event)
+        user_agent = get_user_agent(event)
+        
+        # Validate token
+        token_response = validate_reset_token(password_reset_tokens_table, reset_token)
+        if token_response['statusCode'] != 200:
+            return token_response
+        
+        # Get token record
+        response = password_reset_tokens_table.get_item(
+            Key={'resetToken': reset_token}
+        )
+        token_record = response.get('Item')
+        
+        if not token_record:
+            return error_response(400, 'Invalid reset token')
+        
+        # Get person record
+        person_response = people_table.get_item(
+            Key={'id': token_record['personId']}
+        )
+        person = person_response.get('Item')
+        
+        if not person:
+            return error_response(400, 'User account not found')
+        
+        # Hash new password
+        password_data = hash_password(new_password)
+        
+        # Update person's password
+        people_table.update_item(
+            Key={'id': person['id']},
+            UpdateExpression='SET passwordHash = :hash, passwordSalt = :salt, lastPasswordChange = :timestamp, requirePasswordChange = :require_change',
+            ExpressionAttributeValues={
+                ':hash': password_data['hash'],
+                ':salt': password_data['salt'],
+                ':timestamp': datetime.utcnow().isoformat(),
+                ':require_change': False
+            }
+        )
+        
+        # Mark token as used
+        password_reset_tokens_table.update_item(
+            Key={'resetToken': reset_token},
+            UpdateExpression='SET isUsed = :used',
+            ExpressionAttributeValues={':used': True}
+        )
+        
+        # Log security event
+        create_audit_log(
+            audit_logs_table,
+            person['id'],
+            'PASSWORD_RESET_COMPLETED',
+            True,
+            {'reset_token': reset_token},
+            client_ip,
+            user_agent
+        )
+        
+        print(f"Password reset completed for person: {person['id']}")
+        
+        return {
+            'statusCode': 200,
+            'headers': get_cors_headers(),
+            'body': json.dumps({
+                'success': True,
+                'message': 'Password has been successfully reset. You can now log in with your new password.'
+            })
+        }
+        
+    except Exception as e:
+        print(f"Error resetting password: {str(e)}")
+        return error_response(500, 'Internal server error')
+
+def cleanup_expired_tokens(password_reset_tokens_table):
+    """Clean up expired reset tokens"""
+    try:
+        # Scan for expired tokens
+        cutoff_time = (datetime.utcnow() - timedelta(hours=24)).isoformat()
+        
+        response = password_reset_tokens_table.scan(
+            FilterExpression='expiresAt < :cutoff',
+            ExpressionAttributeValues={':cutoff': cutoff_time}
+        )
+        
+        expired_tokens = response.get('Items', [])
+        cleaned_count = 0
+        
+        # Delete expired tokens
+        for token in expired_tokens:
+            password_reset_tokens_table.delete_item(
+                Key={'resetToken': token['resetToken']}
+            )
+            cleaned_count += 1
+        
+        print(f"Cleaned up {cleaned_count} expired tokens")
+        
+        return {
+            'statusCode': 200,
+            'headers': get_cors_headers(),
+            'body': json.dumps({
+                'success': True,
+                'message': f'Cleaned up {cleaned_count} expired tokens',
+                'cleaned_count': cleaned_count
+            })
+        }
+        
+    except Exception as e:
+        print(f"Error cleaning up expired tokens: {str(e)}")
+        return error_response(500, 'Internal server error')
+
 def lambda_handler(event, context):
     print(f"Event: {json.dumps(event)}")
     
@@ -25,10 +388,14 @@ def lambda_handler(event, context):
     people_table_name = os.environ.get('PEOPLE_TABLE_NAME', 'PeopleTable')
     projects_table_name = os.environ.get('PROJECTS_TABLE_NAME', 'ProjectsTable')
     subscriptions_table_name = os.environ.get('SUBSCRIPTIONS_TABLE_NAME', 'SubscriptionsTable')
+    password_reset_tokens_table_name = os.environ.get('PASSWORD_RESET_TOKENS_TABLE_NAME', 'PasswordResetTokensTable')
+    audit_logs_table_name = os.environ.get('AUDIT_LOGS_TABLE_NAME', 'AuditLogsTable')
     
     people_table = dynamodb.Table(people_table_name)
     projects_table = dynamodb.Table(projects_table_name)
     subscriptions_table = dynamodb.Table(subscriptions_table_name)
+    password_reset_tokens_table = dynamodb.Table(password_reset_tokens_table_name)
+    audit_logs_table = dynamodb.Table(audit_logs_table_name)
     
     # Extract HTTP method and path
     http_method = event.get('httpMethod', 'GET')
@@ -111,7 +478,34 @@ def lambda_handler(event, context):
             if http_method == 'DELETE':
                 return delete_subscription(subscriptions_table, subscription_id)
         
-        # ADMIN ENDPOINTS (new)
+        # PASSWORD RESET ENDPOINTS (simplified routing)
+        elif path == '/auth/password-reset':
+            if http_method == 'POST':
+                # Determine operation based on request body
+                body = json.loads(event.get('body', '{}'))
+                operation = body.get('operation', 'initiate')
+                
+                if operation == 'initiate':
+                    return initiate_password_reset(people_table, password_reset_tokens_table, audit_logs_table, event)
+                elif operation == 'complete':
+                    return reset_password_with_token(people_table, password_reset_tokens_table, audit_logs_table, event)
+                else:
+                    return error_response(400, 'Invalid operation')
+            
+            elif http_method == 'GET':
+                # Token validation via query parameters
+                query_params = event.get('queryStringParameters') or {}
+                token = query_params.get('token')
+                if token:
+                    return validate_reset_token(password_reset_tokens_table, token)
+                else:
+                    return error_response(400, 'Token parameter is required')
+        
+        elif path == '/admin/password-reset':
+            if http_method == 'POST':
+                return cleanup_expired_tokens(password_reset_tokens_table)
+        
+        # ADMIN ENDPOINTS (existing)
         elif path == '/admin/dashboard':
             return get_admin_dashboard(people_table, projects_table, subscriptions_table)
         
@@ -166,7 +560,17 @@ def create_person(people_table, event):
         'dateOfBirth': body.get('dateOfBirth'),
         'address': clean_address,
         'createdAt': now,
-        'updatedAt': now
+        'updatedAt': now,
+        # Password-related fields (will be populated by password management functions)
+        'passwordHash': None,
+        'passwordSalt': None,
+        'requirePasswordChange': True,  # Default to true for new accounts
+        'lastPasswordChange': None,
+        'passwordHistory': [],  # Store last 5 password hashes
+        'failedLoginAttempts': 0,
+        'accountLockedUntil': None,
+        'lastLoginAt': None,
+        'isActive': True
     }
     
     people_table.put_item(Item=person)

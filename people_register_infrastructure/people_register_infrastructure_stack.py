@@ -60,6 +60,75 @@ class PeopleRegisterInfrastructureStack(Stack):
             point_in_time_recovery=True,
         )
 
+        # DynamoDB Table for storing password reset tokens
+        password_reset_tokens_table = dynamodb.Table(
+            self, "PasswordResetTokensTable",
+            table_name="PasswordResetTokensTable",
+            partition_key=dynamodb.Attribute(
+                name="resetToken",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,
+            time_to_live_attribute="expiresAt",  # TTL configuration
+        )
+
+        # Add GSI for querying reset tokens by email
+        password_reset_tokens_table.add_global_secondary_index(
+            index_name="EmailIndex",
+            partition_key=dynamodb.Attribute(
+                name="email",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # DynamoDB Table for storing audit logs
+        audit_logs_table = dynamodb.Table(
+            self, "AuditLogsTable",
+            table_name="AuditLogsTable",
+            partition_key=dynamodb.Attribute(
+                name="id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="timestamp",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,
+        )
+
+        # Add GSI for querying audit logs by person
+        audit_logs_table.add_global_secondary_index(
+            index_name="PersonIndex",
+            partition_key=dynamodb.Attribute(
+                name="personId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="timestamp",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # Add GSI for querying audit logs by action type
+        audit_logs_table.add_global_secondary_index(
+            index_name="ActionIndex",
+            partition_key=dynamodb.Attribute(
+                name="action",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="timestamp",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
         # Add GSI for querying subscriptions by project
         subscriptions_table.add_global_secondary_index(
             index_name="ProjectIndex",
@@ -90,6 +159,8 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "PROJECTS_TABLE_NAME": projects_table.table_name,
                 "SUBSCRIPTIONS_TABLE_NAME": subscriptions_table.table_name,
+                "PASSWORD_RESET_TOKENS_TABLE_NAME": password_reset_tokens_table.table_name,
+                "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
             },
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -99,6 +170,8 @@ class PeopleRegisterInfrastructureStack(Stack):
         people_table.grant_read_write_data(api_lambda)
         projects_table.grant_read_write_data(api_lambda)
         subscriptions_table.grant_read_write_data(api_lambda)
+        password_reset_tokens_table.grant_read_write_data(api_lambda)
+        audit_logs_table.grant_read_write_data(api_lambda)
 
         # API Gateway
         api = apigateway.RestApi(
@@ -171,6 +244,18 @@ class PeopleRegisterInfrastructureStack(Stack):
         admin_resource = api.root.add_resource("admin")
         dashboard_resource = admin_resource.add_resource("dashboard")
         dashboard_resource.add_method("GET", lambda_integration)  # Get admin dashboard
+        
+        # Password reset cleanup (admin endpoint) - simplified
+        password_reset_admin_resource = admin_resource.add_resource("password-reset")
+        password_reset_admin_resource.add_method("POST", lambda_integration)  # Cleanup expired tokens
+
+        # Authentication resource (new) - simplified routing
+        auth_resource = api.root.add_resource("auth")
+        
+        # Single password-reset endpoint that handles all operations via HTTP method and body
+        password_reset_resource = auth_resource.add_resource("password-reset")
+        password_reset_resource.add_method("POST", lambda_integration)  # All password reset operations
+        password_reset_resource.add_method("GET", lambda_integration)   # Token validation via query params
 
         # S3 Bucket for hosting the frontend
         frontend_bucket = s3.Bucket(
@@ -242,4 +327,18 @@ class PeopleRegisterInfrastructureStack(Stack):
             value=people_table.table_name,
             description="DynamoDB table name",
             export_name="PeopleRegisterTableName"
+        )
+
+        CfnOutput(
+            self, "PasswordResetTokensTableName",
+            value=password_reset_tokens_table.table_name,
+            description="Password Reset Tokens DynamoDB table name",
+            export_name="PasswordResetTokensTableName"
+        )
+
+        CfnOutput(
+            self, "AuditLogsTableName",
+            value=audit_logs_table.table_name,
+            description="Audit Logs DynamoDB table name",
+            export_name="AuditLogsTableName"
         )
