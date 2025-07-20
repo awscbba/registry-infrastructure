@@ -5,6 +5,7 @@
         "version": "3.13",
         "disable_plugin": false
     },
+    "nodejs": "latest",
     "awscli2": "latest",
     "git": "latest",
     "uv": "latest"
