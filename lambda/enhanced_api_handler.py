@@ -1,6 +1,7 @@
 """
 Enhanced API Handler - Complete Session Management and Security
 Implements all session management features with Enhanced Password Service V2
+TASK 20: Production Security Hardening Implementation
 """
 
 import json
@@ -9,6 +10,17 @@ import uuid
 import os
 from datetime import datetime, timedelta
 from decimal import Decimal
+
+# Task 20: Import security hardening modules
+try:
+    from rate_limiter import check_authentication_rate_limit, rate_limit_decorator
+    from security_utils import SecurityUtils, sanitize_inputs
+    from csrf_protection import csrf_protect, generate_csrf_token_for_session
+    SECURITY_MODULES_AVAILABLE = True
+    print("✅ Security hardening modules imported successfully")
+except ImportError as e:
+    print(f"⚠️ Security hardening modules not available: {str(e)}")
+    SECURITY_MODULES_AVAILABLE = False
 
 # Helper function for JSON serialization of Decimal types
 def decimal_default(obj):
@@ -49,13 +61,32 @@ class DecimalEncoder(json.JSONEncoder):
         return super(DecimalEncoder, self).default(obj)
 
 def get_cors_headers():
-    """Get CORS headers for API responses"""
-    return {
+    """Get CORS headers and security headers for API responses (Task 20: Production Security Hardening)"""
+    headers = {
         'Access-Control-Allow-Origin': '*',
-        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token',
+        'Access-Control-Allow-Headers': 'Content-Type,X-Amz-Date,Authorization,X-Api-Key,X-Amz-Security-Token,X-CSRF-Token',
         'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS',
         'Content-Type': 'application/json'
     }
+    
+    # Add comprehensive security headers (Task 20: Production Security Hardening)
+    if SECURITY_MODULES_AVAILABLE:
+        security_headers = SecurityUtils.generate_security_headers()
+        headers.update(security_headers)
+    else:
+        # Fallback security headers if security modules are not available
+        headers.update({
+            'X-XSS-Protection': '1; mode=block',
+            'X-Content-Type-Options': 'nosniff',
+            'X-Frame-Options': 'DENY',
+            'Strict-Transport-Security': 'max-age=31536000; includeSubDomains; preload',
+            'Referrer-Policy': 'strict-origin-when-cross-origin',
+            'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+            'Pragma': 'no-cache',
+            'Expires': '0'
+        })
+    
+    return headers
 
 def error_response(status_code, message):
     """Create standardized error response"""
@@ -131,16 +162,57 @@ def lambda_handler(event, context):
                 'task_17_complete': True
             })
         
-        # Enhanced password validation endpoint
+        # Enhanced password validation endpoint with security hardening (Task 20)
         if path == '/auth/validate-password' and http_method == 'POST':
             try:
+                # Task 20: Rate limiting for password validation
+                if SECURITY_MODULES_AVAILABLE:
+                    is_allowed, rate_limit_info, rate_headers = check_authentication_rate_limit(event, 'auth_validate_password')
+                    if not is_allowed:
+                        headers = get_cors_headers()
+                        headers.update(rate_headers)
+                        return {
+                            'statusCode': 429,
+                            'headers': headers,
+                            'body': json.dumps({
+                                'error': 'Rate limit exceeded',
+                                'message': 'Too many password validation requests. Try again later.',
+                                'retry_after': rate_limit_info.get('reset_time')
+                            })
+                        }
+                
+                # Task 20: Input sanitization
                 body = json.loads(event.get('body', '{}'))
+                if SECURITY_MODULES_AVAILABLE:
+                    body = SecurityUtils.sanitize_json_input(body)
+                
                 password = body.get('password', '')
                 confirm_password = body.get('confirmPassword')
                 
+                # Task 20: Additional security validation
+                if SECURITY_MODULES_AVAILABLE:
+                    # Check for injection attempts
+                    if SecurityUtils.detect_sql_injection(password) or SecurityUtils.detect_command_injection(password):
+                        SecurityUtils.log_security_event(
+                            'password_injection_attempt',
+                            {'endpoint': '/auth/validate-password'},
+                            {'ip': get_client_ip(event), 'user_agent': get_user_agent(event)}
+                        )
+                        return error_response(400, 'Invalid password format')
+                    
+                    # Use enhanced security validation
+                    validation_result = SecurityUtils.validate_password_input(password)
+                    if not validation_result['valid']:
+                        return success_response({
+                            'valid': False,
+                            'errors': validation_result['errors'],
+                            'strength_score': validation_result['strength_score'],
+                            'enhanced_validation': True
+                        })
+                
                 if ENHANCED_SERVICE_AVAILABLE:
                     validation_errors = validate_password_strength_v2(password, confirm_password)
-                    return success_response({
+                    response = success_response({
                         'valid': len(validation_errors) == 0,
                         'errors': validation_errors,
                         'enhanced_validation': True
@@ -151,11 +223,17 @@ def lambda_handler(event, context):
                     if len(password) < 8:
                         errors.append({'field': 'password', 'code': 'TOO_SHORT', 'message': 'Password must be at least 8 characters'})
                     
-                    return success_response({
+                    response = success_response({
                         'valid': len(errors) == 0,
                         'errors': errors,
                         'enhanced_validation': False
                     })
+                
+                # Task 20: Add rate limiting headers
+                if SECURITY_MODULES_AVAILABLE and 'rate_headers' in locals():
+                    response['headers'].update(rate_headers)
+                
+                return response
                     
             except Exception as e:
                 print(f"❌ Error in password validation: {str(e)}")
@@ -311,22 +389,70 @@ def lambda_handler(event, context):
             else:
                 return error_response(503, 'Enhanced session management not available')
         
-        # Password reset request endpoint
+        # Password reset request endpoint with security hardening (Task 20)
         if path == '/auth/password-reset' and http_method == 'POST':
             try:
+                # Task 20: Rate limiting for password reset requests
+                if SECURITY_MODULES_AVAILABLE:
+                    is_allowed, rate_limit_info, rate_headers = check_authentication_rate_limit(event, 'auth_password_reset')
+                    if not is_allowed:
+                        headers = get_cors_headers()
+                        headers.update(rate_headers)
+                        return {
+                            'statusCode': 429,
+                            'headers': headers,
+                            'body': json.dumps({
+                                'error': 'Rate limit exceeded',
+                                'message': 'Too many password reset requests. Try again later.',
+                                'retry_after': rate_limit_info.get('reset_time')
+                            })
+                        }
+                
+                # Task 20: Input sanitization and validation
                 body = json.loads(event.get('body', '{}'))
+                if SECURITY_MODULES_AVAILABLE:
+                    body = SecurityUtils.sanitize_json_input(body)
+                
                 email = body.get('email', '').strip().lower()
                 
                 if not email:
                     return error_response(400, 'Email is required')
                 
+                # Task 20: Enhanced email validation and security checks
+                if SECURITY_MODULES_AVAILABLE:
+                    if not SecurityUtils.validate_email(email):
+                        SecurityUtils.log_security_event(
+                            'invalid_email_format',
+                            {'endpoint': '/auth/password-reset', 'email': email[:10] + '***'},
+                            {'ip': get_client_ip(event), 'user_agent': get_user_agent(event)}
+                        )
+                        return error_response(400, 'Invalid email format')
+                    
+                    # Check for injection attempts
+                    if SecurityUtils.detect_sql_injection(email) or SecurityUtils.detect_command_injection(email):
+                        SecurityUtils.log_security_event(
+                            'email_injection_attempt',
+                            {'endpoint': '/auth/password-reset'},
+                            {'ip': get_client_ip(event), 'user_agent': get_user_agent(event)}
+                        )
+                        return error_response(400, 'Invalid email format')
+                
                 # Get table names from environment
                 password_reset_tokens_table_name = os.environ.get('PASSWORD_RESET_TOKENS_TABLE_NAME', 'PasswordResetTokensTable')
                 password_reset_tokens_table = dynamodb.Table(password_reset_tokens_table_name)
                 
-                # Basic password reset logic
+                # Basic password reset logic with enhanced security
                 reset_token = str(uuid.uuid4())
                 expires_at = datetime.utcnow() + timedelta(hours=1)
+                client_ip = get_client_ip(event)
+                
+                # Task 20: Log password reset attempt for security monitoring
+                if SECURITY_MODULES_AVAILABLE:
+                    SecurityUtils.log_security_event(
+                        'password_reset_requested',
+                        {'endpoint': '/auth/password-reset', 'email': email[:10] + '***'},
+                        {'ip': client_ip, 'user_agent': get_user_agent(event)}
+                    )
                 
                 # Store reset token
                 password_reset_tokens_table.put_item(
@@ -336,18 +462,33 @@ def lambda_handler(event, context):
                         'expiresAt': expires_at.isoformat(),
                         'isUsed': False,
                         'createdAt': datetime.utcnow().isoformat(),
-                        'ipAddress': client_ip
+                        'ipAddress': client_ip,
+                        'userAgent': get_user_agent(event)[:200]  # Task 20: Track user agent (truncated)
                     }
                 )
                 
-                return success_response({
+                response = success_response({
                     'success': True,
                     'message': 'Password reset email sent (if email exists)',
-                    'enhanced_reset': ENHANCED_SERVICE_AVAILABLE
+                    'enhanced_reset': ENHANCED_SERVICE_AVAILABLE,
+                    'security_hardened': SECURITY_MODULES_AVAILABLE
                 })
+                
+                # Task 20: Add rate limiting headers
+                if SECURITY_MODULES_AVAILABLE and 'rate_headers' in locals():
+                    response['headers'].update(rate_headers)
+                
+                return response
                 
             except Exception as e:
                 print(f"❌ Error in password reset: {str(e)}")
+                # Task 20: Log security event for failed password reset
+                if SECURITY_MODULES_AVAILABLE:
+                    SecurityUtils.log_security_event(
+                        'password_reset_error',
+                        {'endpoint': '/auth/password-reset', 'error': str(e)},
+                        {'ip': get_client_ip(event), 'user_agent': get_user_agent(event)}
+                    )
                 return error_response(500, 'Password reset failed')
         
         # Projects endpoint
@@ -519,15 +660,58 @@ def lambda_handler(event, context):
                 print(f"❌ Error getting subscriptions: {str(e)}")
                 return error_response(500, 'Failed to get subscriptions')
         
-        # POST /subscriptions - Create new subscription
+        # POST /subscriptions - Create new subscription with security hardening (Task 20)
         if path == '/subscriptions' and http_method == 'POST':
             try:
-                # Parse request body
+                # Task 20: CSRF Protection for subscription forms
+                if SECURITY_MODULES_AVAILABLE:
+                    from csrf_protection import CSRFProtection
+                    csrf_protection = CSRFProtection()
+                    session_id = csrf_protection.get_session_id(event)
+                    
+                    # Get CSRF token from header or body
+                    csrf_token = event.get('headers', {}).get('X-CSRF-Token')
+                    if not csrf_token:
+                        try:
+                            temp_body = json.loads(event.get('body', '{}'))
+                            csrf_token = temp_body.get('csrf_token')
+                        except json.JSONDecodeError:
+                            pass
+                    
+                    # Validate CSRF token
+                    is_valid, error_message = csrf_protection.validate_csrf_token(csrf_token, session_id, 'subscription_form')
+                    if not is_valid:
+                        SecurityUtils.log_security_event(
+                            'csrf_validation_failed',
+                            {'endpoint': '/subscriptions', 'error': error_message},
+                            {'ip': get_client_ip(event), 'user_agent': get_user_agent(event)}
+                        )
+                        return error_response(403, f'CSRF validation failed: {error_message}')
+                
+                # Task 20: Input sanitization
                 body = json.loads(event.get('body', '{}'))
+                if SECURITY_MODULES_AVAILABLE:
+                    body = SecurityUtils.sanitize_json_input(body)
                 
                 # Validate required fields
                 if not body.get('personId') or not body.get('projectId'):
                     return error_response(400, 'personId and projectId are required')
+                
+                # Task 20: Additional input validation
+                if SECURITY_MODULES_AVAILABLE:
+                    person_id = body.get('personId', '')
+                    project_id = body.get('projectId', '')
+                    notes = body.get('notes', '')
+                    
+                    # Check for injection attempts in IDs and notes
+                    for field_name, field_value in [('personId', person_id), ('projectId', project_id), ('notes', notes)]:
+                        if SecurityUtils.detect_sql_injection(str(field_value)) or SecurityUtils.detect_command_injection(str(field_value)):
+                            SecurityUtils.log_security_event(
+                                'injection_attempt',
+                                {'endpoint': '/subscriptions', 'field': field_name},
+                                {'ip': get_client_ip(event), 'user_agent': get_user_agent(event)}
+                            )
+                            return error_response(400, f'Invalid {field_name} format')
                 
                 # Get table names from environment
                 subscriptions_table_name = os.environ.get('SUBSCRIPTIONS_TABLE_NAME', 'SubscriptionsTable')

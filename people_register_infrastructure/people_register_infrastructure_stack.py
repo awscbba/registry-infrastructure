@@ -188,6 +188,62 @@ class PeopleRegisterInfrastructureStack(Stack):
             projection_type=dynamodb.ProjectionType.ALL
         )
 
+        # DynamoDB Table for rate limiting (Task 20 - Production Security Hardening)
+        rate_limit_table = dynamodb.Table(
+            self, "RateLimitTable",
+            table_name="RateLimitTable",
+            partition_key=dynamodb.Attribute(
+                name="id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,
+            time_to_live_attribute="ttl"  # Auto-cleanup old rate limit records
+        )
+
+        # Add GSI for querying rate limits by endpoint
+        rate_limit_table.add_global_secondary_index(
+            index_name="EndpointIndex",
+            partition_key=dynamodb.Attribute(
+                name="endpoint",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="lastReset",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # DynamoDB Table for CSRF token storage (Task 20 - Production Security Hardening)
+        csrf_token_table = dynamodb.Table(
+            self, "CSRFTokenTable",
+            table_name="CSRFTokenTable",
+            partition_key=dynamodb.Attribute(
+                name="token",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,
+            time_to_live_attribute="ttl"  # Auto-cleanup expired CSRF tokens
+        )
+
+        # Add GSI for querying CSRF tokens by session
+        csrf_token_table.add_global_secondary_index(
+            index_name="SessionIndex",
+            partition_key=dynamodb.Attribute(
+                name="session_id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="created_at",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
         # DynamoDB Table for storing audit logs
         audit_logs_table = dynamodb.Table(
             self, "AuditLogsTable",
@@ -283,6 +339,9 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "EMAIL_TRACKING_TABLE": email_tracking_table.table_name,
                 "PASSWORD_HISTORY_TABLE": password_history_table.table_name,
                 "SESSION_TRACKING_TABLE": session_tracking_table.table_name,
+                "RATE_LIMIT_TABLE_NAME": rate_limit_table.table_name,
+                "CSRF_TOKEN_TABLE_NAME": csrf_token_table.table_name,
+                "CSRF_SECRET": "production-csrf-secret-change-this-value",  # Change in production
                 "SES_FROM_EMAIL": "noreply@people-register.local",  # Replace with your verified email
                 "FRONTEND_URL": "https://d28z2il3z2vmpc.cloudfront.net",  # Will be updated after CloudFront creation
             },
@@ -299,6 +358,8 @@ class PeopleRegisterInfrastructureStack(Stack):
         email_tracking_table.grant_read_write_data(api_lambda)
         password_history_table.grant_read_write_data(api_lambda)
         session_tracking_table.grant_read_write_data(api_lambda)
+        rate_limit_table.grant_read_write_data(api_lambda)
+        csrf_token_table.grant_read_write_data(api_lambda)
         
         # Grant Lambda permissions to send emails via SES
         api_lambda.add_to_role_policy(
