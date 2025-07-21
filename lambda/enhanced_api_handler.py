@@ -1,5 +1,5 @@
 """
-Enhanced API Handler - Task 17: Complete Session Management and Security
+Enhanced API Handler - Complete Session Management and Security
 Implements all session management features with Enhanced Password Service V2
 """
 
@@ -89,9 +89,9 @@ def decode_token(token):
         return None
 
 def lambda_handler(event, context):
-    """Enhanced API Lambda handler - Task 17: Complete Session Management"""
+    """Enhanced API Lambda handler - Complete Session Management"""
     try:
-        print(f"🚀 Task 17 Session Management API - Service Available: {ENHANCED_SERVICE_AVAILABLE}")
+        print(f"🚀 Session Management API - Service Available: {ENHANCED_SERVICE_AVAILABLE}")
         
         # Extract HTTP method and path
         http_method = event.get('httpMethod', 'GET')
@@ -154,7 +154,7 @@ def lambda_handler(event, context):
                 print(f"❌ Error in password validation: {str(e)}")
                 return error_response(500, 'Password validation failed')
         
-        # Token refresh endpoint (Task 17 requirement)
+        # Token refresh endpoint
         if path == '/auth/refresh-token' and http_method == 'POST':
             if ENHANCED_SERVICE_AVAILABLE:
                 try:
@@ -182,7 +182,7 @@ def lambda_handler(event, context):
             else:
                 return error_response(503, 'Enhanced session management not available')
         
-        # Active sessions endpoint (Task 17 requirement)
+        # Active sessions endpoint
         if path == '/auth/active-sessions' and http_method == 'GET':
             if ENHANCED_SERVICE_AVAILABLE:
                 try:
@@ -212,7 +212,7 @@ def lambda_handler(event, context):
             else:
                 return error_response(503, 'Enhanced session management not available')
         
-        # Logout endpoint (Task 17 requirement)
+        # Logout endpoint
         if path == '/auth/logout' and http_method == 'POST':
             if ENHANCED_SERVICE_AVAILABLE:
                 try:
@@ -250,7 +250,7 @@ def lambda_handler(event, context):
             else:
                 return error_response(503, 'Enhanced session management not available')
         
-        # Logout all devices endpoint (Task 17 requirement)
+        # Logout all devices endpoint
         if path == '/auth/logout-all' and http_method == 'POST':
             if ENHANCED_SERVICE_AVAILABLE:
                 try:
@@ -286,7 +286,7 @@ def lambda_handler(event, context):
             else:
                 return error_response(503, 'Enhanced session management not available')
         
-        # Session cleanup endpoint (Task 17 maintenance)
+        # Session cleanup endpoint
         if path == '/auth/cleanup-sessions' and http_method == 'POST':
             if ENHANCED_SERVICE_AVAILABLE:
                 try:
@@ -489,7 +489,7 @@ def lambda_handler(event, context):
         
         # Default response for unknown endpoints
         return success_response({
-            'message': 'Task 17: Session Management and Security API',
+            'message': 'Session Management and Security API',
             'endpoint': f'{http_method} {path}',
             'enhanced_service_available': ENHANCED_SERVICE_AVAILABLE,
             'available_endpoints': [
@@ -518,5 +518,5 @@ def lambda_handler(event, context):
         })
         
     except Exception as e:
-        print(f"💥 Error in Task 17 session management API: {str(e)}")
-        return error_response(500, f'Task 17 API error: {str(e)}')
+        print(f"💥 Error in session management API: {str(e)}")
+        return error_response(500, f'API error: {str(e)}')
