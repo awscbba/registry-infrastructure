@@ -10,6 +10,13 @@ import os
 from datetime import datetime, timedelta
 from decimal import Decimal
 
+# Helper function for JSON serialization of Decimal types
+def decimal_default(obj):
+    """Convert Decimal objects to int or float for JSON serialization"""
+    if isinstance(obj, Decimal):
+        return int(obj) if obj % 1 == 0 else float(obj)
+    raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
+
 # Enhanced password service V2 - with robust error handling
 try:
     from enhanced_password_service_v2 import (
@@ -487,6 +494,235 @@ def lambda_handler(event, context):
                 print(f"❌ Error deleting project: {str(e)}")
                 return error_response(500, 'Failed to delete project')
         
+        # ==================== SUBSCRIPTION ENDPOINTS ====================
+        
+        # GET /subscriptions - List all subscriptions
+        if path == '/subscriptions' and http_method == 'GET':
+            try:
+                # Get table name from environment
+                subscriptions_table_name = os.environ.get('SUBSCRIPTIONS_TABLE_NAME', 'SubscriptionsTable')
+                subscriptions_table = dynamodb.Table(subscriptions_table_name)
+                
+                # Scan all subscriptions
+                response = subscriptions_table.scan()
+                subscriptions = response.get('Items', [])
+                
+                # Convert Decimal to int/float for JSON serialization
+                subscriptions = json.loads(json.dumps(subscriptions, default=decimal_default))
+                
+                return success_response({
+                    'subscriptions': subscriptions,
+                    'count': len(subscriptions)
+                })
+                
+            except Exception as e:
+                print(f"❌ Error getting subscriptions: {str(e)}")
+                return error_response(500, 'Failed to get subscriptions')
+        
+        # POST /subscriptions - Create new subscription
+        if path == '/subscriptions' and http_method == 'POST':
+            try:
+                # Parse request body
+                body = json.loads(event.get('body', '{}'))
+                
+                # Validate required fields
+                if not body.get('personId') or not body.get('projectId'):
+                    return error_response(400, 'personId and projectId are required')
+                
+                # Get table names from environment
+                subscriptions_table_name = os.environ.get('SUBSCRIPTIONS_TABLE_NAME', 'SubscriptionsTable')
+                people_table_name = os.environ.get('PEOPLE_TABLE_NAME', 'PeopleTable')
+                projects_table_name = os.environ.get('PROJECTS_TABLE_NAME', 'ProjectsTable')
+                
+                subscriptions_table = dynamodb.Table(subscriptions_table_name)
+                people_table = dynamodb.Table(people_table_name)
+                projects_table = dynamodb.Table(projects_table_name)
+                
+                # Verify person exists
+                person_response = people_table.get_item(Key={'id': body['personId']})
+                if 'Item' not in person_response:
+                    return error_response(400, 'Person not found')
+                
+                # Verify project exists
+                project_response = projects_table.get_item(Key={'id': body['projectId']})
+                if 'Item' not in project_response:
+                    return error_response(400, 'Project not found')
+                
+                # Create subscription
+                subscription_id = str(uuid.uuid4())
+                now = datetime.utcnow().isoformat()
+                
+                subscription = {
+                    'id': subscription_id,
+                    'personId': body['personId'],
+                    'projectId': body['projectId'],
+                    'status': body.get('status', 'active'),
+                    'notes': body.get('notes', ''),
+                    'createdAt': now,
+                    'updatedAt': now
+                }
+                
+                # Save subscription
+                subscriptions_table.put_item(Item=subscription)
+                
+                # Convert Decimal to int/float for JSON serialization
+                subscription = json.loads(json.dumps(subscription, default=decimal_default))
+                
+                return success_response(subscription)
+                
+            except json.JSONDecodeError:
+                return error_response(400, 'Invalid JSON in request body')
+            except Exception as e:
+                print(f"❌ Error creating subscription: {str(e)}")
+                return error_response(500, 'Failed to create subscription')
+        
+        # PUT /subscriptions/{id} - Update subscription
+        if path.startswith('/subscriptions/') and http_method == 'PUT':
+            try:
+                # Extract subscription ID from path
+                subscription_id = path.split('/')[-1]
+                
+                # Parse request body
+                body = json.loads(event.get('body', '{}'))
+                
+                # Get table name from environment
+                subscriptions_table_name = os.environ.get('SUBSCRIPTIONS_TABLE_NAME', 'SubscriptionsTable')
+                subscriptions_table = dynamodb.Table(subscriptions_table_name)
+                
+                # Build update expression
+                update_expression = "SET updatedAt = :updated_at"
+                expression_values = {':updated_at': datetime.utcnow().isoformat()}
+                
+                if 'status' in body:
+                    update_expression += ", #status = :status"
+                    expression_values[':status'] = body['status']
+                
+                if 'notes' in body:
+                    update_expression += ", notes = :notes"
+                    expression_values[':notes'] = body['notes']
+                
+                expression_names = {}
+                if 'status' in body:
+                    expression_names['#status'] = 'status'
+                
+                # Update subscription
+                response = subscriptions_table.update_item(
+                    Key={'id': subscription_id},
+                    UpdateExpression=update_expression,
+                    ExpressionAttributeValues=expression_values,
+                    ExpressionAttributeNames=expression_names if expression_names else None,
+                    ReturnValues='ALL_NEW'
+                )
+                
+                updated_subscription = response.get('Attributes', {})
+                
+                # Convert Decimal to int/float for JSON serialization
+                updated_subscription = json.loads(json.dumps(updated_subscription, default=decimal_default))
+                
+                return success_response(updated_subscription)
+                
+            except json.JSONDecodeError:
+                return error_response(400, 'Invalid JSON in request body')
+            except Exception as e:
+                print(f"❌ Error updating subscription: {str(e)}")
+                return error_response(500, 'Failed to update subscription')
+        
+        # DELETE /subscriptions/{id} - Delete subscription
+        if path.startswith('/subscriptions/') and http_method == 'DELETE':
+            try:
+                # Extract subscription ID from path
+                subscription_id = path.split('/')[-1]
+                
+                # Get table name from environment
+                subscriptions_table_name = os.environ.get('SUBSCRIPTIONS_TABLE_NAME', 'SubscriptionsTable')
+                subscriptions_table = dynamodb.Table(subscriptions_table_name)
+                
+                # Delete subscription
+                subscriptions_table.delete_item(Key={'id': subscription_id})
+                
+                return success_response({
+                    'message': 'Subscription deleted successfully',
+                    'subscriptionId': subscription_id
+                })
+                
+            except Exception as e:
+                print(f"❌ Error deleting subscription: {str(e)}")
+                return error_response(500, 'Failed to delete subscription')
+        
+        # GET /people/{id}/subscriptions - Get subscriptions for a person
+        if path.startswith('/people/') and path.endswith('/subscriptions') and http_method == 'GET':
+            try:
+                # Extract person ID from path
+                person_id = path.split('/')[-2]
+                
+                # Get table names from environment
+                subscriptions_table_name = os.environ.get('SUBSCRIPTIONS_TABLE_NAME', 'SubscriptionsTable')
+                people_table_name = os.environ.get('PEOPLE_TABLE_NAME', 'PeopleTable')
+                
+                subscriptions_table = dynamodb.Table(subscriptions_table_name)
+                people_table = dynamodb.Table(people_table_name)
+                
+                # Verify person exists
+                person_response = people_table.get_item(Key={'id': person_id})
+                if 'Item' not in person_response:
+                    return error_response(404, 'Person not found')
+                
+                # Get subscriptions for person
+                response = subscriptions_table.scan(
+                    FilterExpression='personId = :person_id',
+                    ExpressionAttributeValues={':person_id': person_id}
+                )
+                subscriptions = response.get('Items', [])
+                
+                # Convert Decimal to int/float for JSON serialization
+                subscriptions = json.loads(json.dumps(subscriptions, default=decimal_default))
+                
+                return success_response({
+                    'subscriptions': subscriptions,
+                    'count': len(subscriptions)
+                })
+                
+            except Exception as e:
+                print(f"❌ Error getting person subscriptions: {str(e)}")
+                return error_response(500, 'Failed to get person subscriptions')
+        
+        # GET /projects/{id}/subscriptions - Get subscriptions for a project
+        if path.startswith('/projects/') and path.endswith('/subscriptions') and http_method == 'GET':
+            try:
+                # Extract project ID from path
+                project_id = path.split('/')[-2]
+                
+                # Get table names from environment
+                subscriptions_table_name = os.environ.get('SUBSCRIPTIONS_TABLE_NAME', 'SubscriptionsTable')
+                projects_table_name = os.environ.get('PROJECTS_TABLE_NAME', 'ProjectsTable')
+                
+                subscriptions_table = dynamodb.Table(subscriptions_table_name)
+                projects_table = dynamodb.Table(projects_table_name)
+                
+                # Verify project exists
+                project_response = projects_table.get_item(Key={'id': project_id})
+                if 'Item' not in project_response:
+                    return error_response(404, 'Project not found')
+                
+                # Get subscriptions for project
+                response = subscriptions_table.scan(
+                    FilterExpression='projectId = :project_id',
+                    ExpressionAttributeValues={':project_id': project_id}
+                )
+                subscriptions = response.get('Items', [])
+                
+                # Convert Decimal to int/float for JSON serialization
+                subscriptions = json.loads(json.dumps(subscriptions, default=decimal_default))
+                
+                return success_response({
+                    'subscriptions': subscriptions,
+                    'count': len(subscriptions)
+                })
+                
+            except Exception as e:
+                print(f"❌ Error getting project subscriptions: {str(e)}")
+                return error_response(500, 'Failed to get project subscriptions')
+        
         # Default response for unknown endpoints
         return success_response({
             'message': 'Session Management and Security API',
@@ -499,6 +735,12 @@ def lambda_handler(event, context):
                 'PUT /projects/{id}',
                 'DELETE /projects/{id}',
                 'GET /people',
+                'GET /subscriptions',
+                'POST /subscriptions',
+                'PUT /subscriptions/{id}',
+                'DELETE /subscriptions/{id}',
+                'GET /people/{id}/subscriptions',
+                'GET /projects/{id}/subscriptions',
                 'POST /auth/validate-password',
                 'POST /auth/refresh-token',
                 'GET /auth/active-sessions',
