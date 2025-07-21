@@ -12,6 +12,7 @@ from aws_cdk import (
     Duration,
     RemovalPolicy,
     CfnOutput,
+    BundlingOptions,
 )
 from constructs import Construct
 import os
@@ -80,6 +81,108 @@ class PeopleRegisterInfrastructureStack(Stack):
             index_name="EmailIndex",
             partition_key=dynamodb.Attribute(
                 name="email",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # DynamoDB Table for email delivery tracking
+        email_tracking_table = dynamodb.Table(
+            self, "EmailTrackingTable",
+            table_name="EmailTrackingTable",
+            partition_key=dynamodb.Attribute(
+                name="emailId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,
+            time_to_live_attribute="ttl"  # Auto-delete old email records
+        )
+
+        # Add GSI for querying emails by recipient
+        email_tracking_table.add_global_secondary_index(
+            index_name="RecipientIndex",
+            partition_key=dynamodb.Attribute(
+                name="recipientEmail",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="createdAt",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # Add GSI for querying emails by status
+        email_tracking_table.add_global_secondary_index(
+            index_name="StatusIndex",
+            partition_key=dynamodb.Attribute(
+                name="status",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="createdAt",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # Add GSI for querying emails by template type
+        email_tracking_table.add_global_secondary_index(
+            index_name="TemplateIndex",
+            partition_key=dynamodb.Attribute(
+                name="templateType",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="createdAt",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # DynamoDB Table for password history tracking
+        password_history_table = dynamodb.Table(
+            self, "PasswordHistoryTable",
+            table_name="PasswordHistoryTable",
+            partition_key=dynamodb.Attribute(
+                name="userId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="createdAt",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,
+            time_to_live_attribute="ttl"  # Auto-delete old password history
+        )
+
+        # DynamoDB Table for session tracking
+        session_tracking_table = dynamodb.Table(
+            self, "SessionTrackingTable", 
+            table_name="SessionTrackingTable",
+            partition_key=dynamodb.Attribute(
+                name="sessionId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,
+            time_to_live_attribute="ttl"  # Auto-delete expired sessions
+        )
+
+        # Add GSI for querying sessions by user
+        session_tracking_table.add_global_secondary_index(
+            index_name="UserIndex",
+            partition_key=dynamodb.Attribute(
+                name="userId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="createdAt",
                 type=dynamodb.AttributeType.STRING
             ),
             projection_type=dynamodb.ProjectionType.ALL
@@ -159,18 +262,27 @@ class PeopleRegisterInfrastructureStack(Stack):
         # 2. Lambda permissions to send emails
         # 3. Environment variables for configuration
 
-        # Lambda function for the API - using external file for project management
+        # Lambda function for the API - Final Enhanced API handler (working version)
         api_lambda = _lambda.Function(
             self, "PeopleApiFunction",
             runtime=_lambda.Runtime.PYTHON_3_9,
-            handler="api_handler.lambda_handler",
-            code=_lambda.Code.from_asset("lambda"),
+            handler="enhanced_api_handler.lambda_handler",  # Final working enhanced handler
+            code=_lambda.Code.from_asset("lambda", bundling=BundlingOptions(
+                image=_lambda.Runtime.PYTHON_3_9.bundling_image,
+                command=[
+                    "bash", "-c",
+                    "pip install -r requirements.txt -t /asset-output && cp -au . /asset-output"
+                ]
+            )),
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "PROJECTS_TABLE_NAME": projects_table.table_name,
                 "SUBSCRIPTIONS_TABLE_NAME": subscriptions_table.table_name,
                 "PASSWORD_RESET_TOKENS_TABLE_NAME": password_reset_tokens_table.table_name,
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
+                "EMAIL_TRACKING_TABLE": email_tracking_table.table_name,
+                "PASSWORD_HISTORY_TABLE": password_history_table.table_name,
+                "SESSION_TRACKING_TABLE": session_tracking_table.table_name,
                 "SES_FROM_EMAIL": "noreply@people-register.local",  # Replace with your verified email
                 "FRONTEND_URL": "https://d28z2il3z2vmpc.cloudfront.net",  # Will be updated after CloudFront creation
             },
@@ -184,6 +296,9 @@ class PeopleRegisterInfrastructureStack(Stack):
         subscriptions_table.grant_read_write_data(api_lambda)
         password_reset_tokens_table.grant_read_write_data(api_lambda)
         audit_logs_table.grant_read_write_data(api_lambda)
+        email_tracking_table.grant_read_write_data(api_lambda)
+        password_history_table.grant_read_write_data(api_lambda)
+        session_tracking_table.grant_read_write_data(api_lambda)
         
         # Grant Lambda permissions to send emails via SES
         api_lambda.add_to_role_policy(
@@ -279,14 +394,6 @@ class PeopleRegisterInfrastructureStack(Stack):
 
         # Authentication resource (new) - simplified routing
         auth_resource = api.root.add_resource("auth")
-        
-        # Login endpoint
-        login_resource = auth_resource.add_resource("login")
-        login_resource.add_method("POST", lambda_integration)  # User login
-        
-        # First-time password change endpoint
-        change_password_first_time_resource = auth_resource.add_resource("change-password-first-time")
-        change_password_first_time_resource.add_method("POST", lambda_integration)  # First-time password change
         
         # Single password-reset endpoint that handles all operations via HTTP method and body
         password_reset_resource = auth_resource.add_resource("password-reset")
