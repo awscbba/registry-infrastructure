@@ -501,8 +501,8 @@ class PeopleRegisterInfrastructureStack(Stack):
         
         # Password reset endpoint - Using main API Lambda (for existing functionality)
         password_reset_resource = auth_resource.add_resource("password-reset")
-        password_reset_resource.add_method("POST", api_lambda_integration)  # All password reset operations
-        password_reset_resource.add_method("GET", api_lambda_integration)   # Token validation via query params
+        password_reset_resource.add_method("POST", api_api_lambda_integration)  # All password reset operations
+        password_reset_resource.add_method("GET", api_api_lambda_integration)   # Token validation via query params
 
         # S3 Bucket for hosting the frontend
         frontend_bucket = s3.Bucket(

@@ -932,6 +932,82 @@ def login_user(people_table, audit_logs_table, event):
         print(f"Error during login: {str(e)}")
         return error_response(500, 'Internal server error')
 
+def logout_user(event):
+    """Handle user logout"""
+    try:
+        # For JWT-based authentication, logout is typically handled client-side
+        # by removing the token from storage. Server-side logout would require
+        # token blacklisting which we don't implement here for simplicity.
+        
+        return {
+            'statusCode': 200,
+            'headers': get_cors_headers(),
+            'body': json.dumps({
+                'success': True,
+                'message': 'Logout successful'
+            })
+        }
+        
+    except Exception as e:
+        print(f"Logout error: {str(e)}")
+        return error_response(500, 'Internal server error during logout')
+
+def get_current_user(people_table, event):
+    """Get current user profile from JWT token"""
+    try:
+        # Extract token from Authorization header
+        headers = event.get('headers', {})
+        auth_header = headers.get('Authorization') or headers.get('authorization', '')
+        
+        if not auth_header.startswith('Bearer '):
+            return error_response(401, 'Missing or invalid authorization header')
+        
+        token = auth_header.replace('Bearer ', '')
+        
+        try:
+            # Verify and decode JWT token
+            payload = jwt.decode(token, JWT_SECRET, algorithms=['HS256'])
+            person_id = payload.get('sub')
+            
+            if not person_id:
+                return error_response(401, 'Invalid token payload')
+            
+            # Get person from database
+            response = people_table.get_item(Key={'id': person_id})
+            
+            if 'Item' not in response:
+                return error_response(404, 'User not found')
+            
+            person = response['Item']
+            
+            # Return user profile (excluding sensitive data)
+            user_profile = {
+                'id': person['id'],
+                'email': person['email'],
+                'firstName': person.get('firstName', ''),
+                'lastName': person.get('lastName', ''),
+                'createdAt': person.get('createdAt', ''),
+                'updatedAt': person.get('updatedAt', '')
+            }
+            
+            return {
+                'statusCode': 200,
+                'headers': get_cors_headers(),
+                'body': json.dumps({
+                    'success': True,
+                    'user': user_profile
+                })
+            }
+            
+        except jwt.ExpiredSignatureError:
+            return error_response(401, 'Token has expired')
+        except jwt.InvalidTokenError:
+            return error_response(401, 'Invalid token')
+        
+    except Exception as e:
+        print(f"Get current user error: {str(e)}")
+        return error_response(500, 'Internal server error')
+
 def change_password_profile(people_table, audit_logs_table, event):
     """Handle password change from user profile - Enhanced with history tracking"""
     try:
@@ -2925,11 +3001,50 @@ def lambda_handler(event, context):
                 return delete_subscription(subscriptions_table, subscription_id)
         
         # PASSWORD RESET ENDPOINTS (simplified routing)
+        elif path == '/auth/login':
+            if http_method == 'POST':
+                return login_user(people_table, audit_logs_table, event)
+            elif http_method == 'OPTIONS':
+                return {
+                    'statusCode': 200,
+                    'headers': get_cors_headers(),
+                    'body': json.dumps({'message': 'CORS preflight successful'})
+                }
+            else:
+                return error_response(405, 'Method not allowed')
+                
+        elif path == '/auth/logout':
+            if http_method == 'POST':
+                return logout_user(event)
+            elif http_method == 'OPTIONS':
+                return {
+                    'statusCode': 200,
+                    'headers': get_cors_headers(),
+                    'body': json.dumps({'message': 'CORS preflight successful'})
+                }
+            else:
+                return error_response(405, 'Method not allowed')
+                
+        elif path == '/auth/me':
+            if http_method == 'GET':
+                return get_current_user(people_table, event)
+            elif http_method == 'OPTIONS':
+                return {
+                    'statusCode': 200,
+                    'headers': get_cors_headers(),
+                    'body': json.dumps({'message': 'CORS preflight successful'})
+                }
+            else:
+                return error_response(405, 'Method not allowed')
+                
         elif path == '/auth/password-reset':
             if http_method == 'POST':
                 # Determine operation based on request body
                 body = json.loads(event.get('body', '{}'))
                 operation = body.get('operation', 'initiate')
+                
+                # Debug logging
+                print(f"🔍 DEBUG: Received operation: '{operation}', body: {body}")
                 
                 if operation == 'initiate':
                     return initiate_password_reset(people_table, password_reset_tokens_table, audit_logs_table, event)
@@ -2937,6 +3052,7 @@ def lambda_handler(event, context):
                     return reset_password_with_token(people_table, password_reset_tokens_table, audit_logs_table, event)
                 elif operation == 'login':
                     # Handle login through password-reset endpoint to avoid API Gateway limits
+                    print(f"🔑 DEBUG: Processing login for email: {body.get('email', 'unknown')}")
                     return login_user(people_table, audit_logs_table, event)
                 elif operation == 'change-first-time':
                     # Handle first-time password change through password-reset endpoint
