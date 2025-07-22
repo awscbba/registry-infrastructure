@@ -366,6 +366,211 @@ def lambda_handler(event, context):
                 print(f"❌ Error in password validation: {str(e)}")
                 return error_response(500, 'Password validation failed')
         
+        # Password Management Endpoints - New Implementation
+        if path == '/auth/password' and http_method == 'PUT':
+            try:
+                # Import password management service
+                from password_management_service import PasswordManagementService, PasswordUpdateRequest
+                
+                # Task 20: Rate limiting for password updates
+                if SECURITY_MODULES_AVAILABLE:
+                    is_allowed, rate_limit_info, rate_headers = check_authentication_rate_limit(event, 'password_update')
+                    if not is_allowed:
+                        headers = get_cors_headers()
+                        headers.update(rate_headers)
+                        return {
+                            'statusCode': 429,
+                            'headers': headers,
+                            'body': json.dumps({
+                                'error': 'Rate limit exceeded',
+                                'message': 'Too many password update requests. Try again later.',
+                                'retry_after': rate_limit_info.get('reset_time')
+                            })
+                        }
+                
+                # Parse request body
+                body = json.loads(event.get('body', '{}'))
+                if SECURITY_MODULES_AVAILABLE:
+                    body = SecurityUtils.sanitize_json_input(body)
+                
+                # Extract user ID from JWT token (simplified for lambda)
+                # In production, this would come from proper JWT validation
+                user_id = body.get('user_id') or 'test-user-id'  # TODO: Extract from JWT
+                
+                # Create password update request
+                password_request = PasswordUpdateRequest(
+                    current_password=body.get('current_password', ''),
+                    new_password=body.get('new_password', ''),
+                    confirm_password=body.get('confirm_password', '')
+                )
+                
+                # Get client info
+                client_ip = get_client_ip(event)
+                user_agent = get_user_agent(event)
+                
+                # Update password
+                service = PasswordManagementService()
+                import asyncio
+                success, response, error = asyncio.run(service.update_password(
+                    person_id=user_id,
+                    password_request=password_request,
+                    ip_address=client_ip,
+                    user_agent=user_agent
+                ))
+                
+                if success:
+                    return success_response({
+                        'success': response.success,
+                        'message': response.message,
+                        'require_reauth': response.require_reauth
+                    })
+                else:
+                    return error_response(400, error or 'Password update failed')
+                    
+            except ValueError as e:
+                return error_response(400, str(e))
+            except Exception as e:
+                print(f"❌ Error in password update: {str(e)}")
+                return error_response(500, 'Password update failed')
+        
+        # Password validation endpoint
+        if path == '/auth/password/validate' and http_method == 'POST':
+            try:
+                from password_management_service import PasswordManagementService
+                
+                body = json.loads(event.get('body', '{}'))
+                if SECURITY_MODULES_AVAILABLE:
+                    body = SecurityUtils.sanitize_json_input(body)
+                
+                user_id = body.get('user_id') or 'test-user-id'  # TODO: Extract from JWT
+                current_password = body.get('current_password', '')
+                
+                service = PasswordManagementService()
+                import asyncio
+                is_valid, error_msg = asyncio.run(service.validate_password_change_request(
+                    person_id=user_id,
+                    current_password=current_password
+                ))
+                
+                return success_response({
+                    'valid': is_valid,
+                    'message': error_msg if error_msg else 'Password validation successful'
+                })
+                
+            except Exception as e:
+                print(f"❌ Error in password validation: {str(e)}")
+                return error_response(500, 'Password validation failed')
+        
+        # Password history check endpoint
+        if path == '/auth/password/check-history' and http_method == 'POST':
+            try:
+                from password_management_service import PasswordManagementService
+                
+                body = json.loads(event.get('body', '{}'))
+                if SECURITY_MODULES_AVAILABLE:
+                    body = SecurityUtils.sanitize_json_input(body)
+                
+                user_id = body.get('user_id') or 'test-user-id'  # TODO: Extract from JWT
+                password = body.get('password', '')
+                
+                service = PasswordManagementService()
+                import asyncio
+                can_use, error_msg = asyncio.run(service.check_password_history(
+                    person_id=user_id,
+                    password=password
+                ))
+                
+                return success_response({
+                    'can_use': can_use,
+                    'message': error_msg if error_msg else 'Password can be used'
+                })
+                
+            except Exception as e:
+                print(f"❌ Error in password history check: {str(e)}")
+                return error_response(500, 'Password history check failed')
+        
+        # Admin force password change endpoint
+        if path == '/admin/password/force-change' and http_method == 'POST':
+            try:
+                from password_management_service import PasswordManagementService
+                
+                body = json.loads(event.get('body', '{}'))
+                if SECURITY_MODULES_AVAILABLE:
+                    body = SecurityUtils.sanitize_json_input(body)
+                
+                admin_user_id = body.get('admin_user_id') or 'admin-user-id'  # TODO: Extract from JWT
+                person_id = body.get('person_id', '')
+                
+                if not person_id:
+                    return error_response(400, 'Person ID is required')
+                
+                client_ip = get_client_ip(event)
+                user_agent = get_user_agent(event)
+                
+                service = PasswordManagementService()
+                import asyncio
+                success, error_msg = asyncio.run(service.force_password_change(
+                    person_id=person_id,
+                    admin_user_id=admin_user_id,
+                    ip_address=client_ip,
+                    user_agent=user_agent
+                ))
+                
+                if success:
+                    return success_response({
+                        'success': True,
+                        'message': 'Password change forced successfully'
+                    })
+                else:
+                    return error_response(400, error_msg or 'Failed to force password change')
+                    
+            except Exception as e:
+                print(f"❌ Error in force password change: {str(e)}")
+                return error_response(500, 'Failed to force password change')
+        
+        # Admin generate temporary password endpoint
+        if path == '/admin/password/generate-temporary' and http_method == 'POST':
+            try:
+                from password_management_service import PasswordManagementService
+                
+                body = json.loads(event.get('body', '{}'))
+                if SECURITY_MODULES_AVAILABLE:
+                    body = SecurityUtils.sanitize_json_input(body)
+                
+                admin_user_id = body.get('admin_user_id') or 'admin-user-id'  # TODO: Extract from JWT
+                person_id = body.get('person_id', '')
+                length = body.get('length', 12)
+                
+                if not person_id:
+                    return error_response(400, 'Person ID is required')
+                
+                client_ip = get_client_ip(event)
+                user_agent = get_user_agent(event)
+                
+                service = PasswordManagementService()
+                import asyncio
+                success, temp_password, error_msg = asyncio.run(service.generate_temporary_password(
+                    person_id=person_id,
+                    admin_user_id=admin_user_id,
+                    length=length,
+                    ip_address=client_ip,
+                    user_agent=user_agent
+                ))
+                
+                if success:
+                    return success_response({
+                        'success': True,
+                        'message': 'Temporary password generated successfully',
+                        'temporary_password': temp_password,
+                        'require_change': True
+                    })
+                else:
+                    return error_response(400, error_msg or 'Failed to generate temporary password')
+                    
+            except Exception as e:
+                print(f"❌ Error in generate temporary password: {str(e)}")
+                return error_response(500, 'Failed to generate temporary password')
+        
         # Token refresh endpoint
         if path == '/auth/refresh-token' and http_method == 'POST':
             if ENHANCED_SERVICE_AVAILABLE:
