@@ -32,6 +32,20 @@ Actions:
             echo "🔍 Checking API Code Synchronization"
             echo "==================================="
             
+            # Execute execution mode detection
+            echo "🎯 Detecting execution mode..."
+            chmod +x scripts/execution-mode-detection.sh
+            ./scripts/execution-mode-detection.sh
+            
+            # Source the execution mode environment variables
+            source execution-mode-env.sh
+            
+            echo ""
+            echo "📊 Execution Mode: $EXECUTION_MODE"
+            echo "🔄 Trigger Type: $TRIGGER_TYPE"
+            echo "🌿 Branch: $BRANCH_NAME"
+            echo ""
+            
             # Check if this deployment was triggered by API sync
             if [ -f "lambda/main.py" ] && [ -d "lambda/src" ]; then
                 echo "✅ API code synchronized from registry-api repository"
@@ -60,12 +74,18 @@ Actions:
             BRANCH=${CODECATALYST_SOURCE_BRANCH_NAME:-main}
             COMMIT=${CODECATALYST_SOURCE_BRANCH_REF:-unknown}
             
+            # Merge execution context with deployment context
             echo "{" > deployment-context.json
             echo "  \"deployment_type\": \"$DEPLOYMENT_TYPE\"," >> deployment-context.json
             echo "  \"timestamp\": \"$TIMESTAMP\"," >> deployment-context.json
             echo "  \"branch\": \"$BRANCH\"," >> deployment-context.json
             echo "  \"commit\": \"$COMMIT\"," >> deployment-context.json
-            echo "  \"api_sync_detected\": $API_SYNC_DETECTED" >> deployment-context.json
+            echo "  \"api_sync_detected\": $API_SYNC_DETECTED," >> deployment-context.json
+            echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> deployment-context.json
+            echo "  \"trigger_type\": \"$TRIGGER_TYPE\"," >> deployment-context.json
+            echo "  \"is_main_branch\": $IS_MAIN_BRANCH," >> deployment-context.json
+            echo "  \"skip_deployment\": $SKIP_DEPLOYMENT," >> deployment-context.json
+            echo "  \"skip_testing\": $SKIP_TESTING" >> deployment-context.json
             echo "}" >> deployment-context.json
             
             cat deployment-context.json
@@ -78,6 +98,8 @@ Actions:
         - Name: deploymentContext
           Files:
             - "deployment-context.json"
+            - "execution-context.json"
+            - "execution-mode-env.sh"
 
   PrepareAPIIntegration:
     Identifier: aws/build@v1
@@ -101,10 +123,20 @@ Actions:
             echo "🔧 Preparing API Integration"
             echo "==========================="
             
+            # Source execution mode environment variables
+            source execution-mode-env.sh
+            
             # Read deployment context
             DEPLOYMENT_TYPE=$(jq -r '.deployment_type' deployment-context.json)
             API_SYNC_DETECTED=$(jq -r '.api_sync_detected' deployment-context.json)
             
+            echo "📊 Execution Context:"
+            echo "  Mode: $EXECUTION_MODE"
+            echo "  Trigger: $TRIGGER_TYPE"
+            echo "  Branch: $BRANCH_NAME"
+            echo "  Skip Deployment: $SKIP_DEPLOYMENT"
+            echo "  Skip Testing: $SKIP_TESTING"
+            echo ""
             echo "Deployment type: $DEPLOYMENT_TYPE"
             echo "API sync detected: $API_SYNC_DETECTED"
             
@@ -244,6 +276,17 @@ Actions:
             echo "🔍 Infrastructure Validation"
             echo "=========================="
             
+            # Source execution mode environment variables
+            source execution-mode-env.sh
+            
+            echo "📊 Execution Context:"
+            echo "  Mode: $EXECUTION_MODE"
+            echo "  Trigger: $TRIGGER_TYPE"
+            echo "  Branch: $BRANCH_NAME"
+            echo "  Skip Deployment: $SKIP_DEPLOYMENT"
+            echo "  Skip Testing: $SKIP_TESTING"
+            echo ""
+            
             # Install required tools
             echo "📦 Installing required tools..."
             curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
@@ -338,9 +381,22 @@ Actions:
             echo "🚀 Infrastructure Deployment"
             echo "=========================="
             
-            # Only deploy on main branch
-            if [ "${CODECATALYST_SOURCE_BRANCH_NAME}" != "main" ]; then
-                echo "ℹ️ Not on main branch - skipping deployment"
+            # Source execution mode environment variables
+            source execution-mode-env.sh
+            
+            echo "📊 Execution Context:"
+            echo "  Mode: $EXECUTION_MODE"
+            echo "  Trigger: $TRIGGER_TYPE"
+            echo "  Branch: $BRANCH_NAME"
+            echo "  Skip Deployment: $SKIP_DEPLOYMENT"
+            echo "  Skip Testing: $SKIP_TESTING"
+            echo ""
+            
+            # Check if deployment should be skipped based on execution mode
+            if [ "$SKIP_DEPLOYMENT" = "true" ]; then
+                echo "ℹ️ Execution mode: $EXECUTION_MODE - skipping deployment"
+                echo "🔄 Trigger type: $TRIGGER_TYPE"
+                echo "🌿 Branch: $BRANCH_NAME"
                 
                 # Create placeholder artifacts for downstream actions
                 echo "{" > deployment-summary.json
@@ -348,6 +404,9 @@ Actions:
                 echo "  \"deployment_type\": \"skipped\"," >> deployment-summary.json
                 echo "  \"api_sync_detected\": false," >> deployment-summary.json
                 echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," >> deployment-summary.json
+                echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> deployment-summary.json
+                echo "  \"trigger_type\": \"$TRIGGER_TYPE\"," >> deployment-summary.json
+                echo "  \"skip_reason\": \"Execution mode: $EXECUTION_MODE\"," >> deployment-summary.json
                 echo "  \"outputs\": {" >> deployment-summary.json
                 echo "    \"api_url\": \"skipped\"," >> deployment-summary.json
                 echo "    \"frontend_url\": \"skipped\"," >> deployment-summary.json
@@ -402,6 +461,8 @@ Actions:
                     echo "  \"deployment_type\": \"$DEPLOYMENT_TYPE\"," >> deployment-summary.json
                     echo "  \"api_sync_detected\": $API_SYNC_DETECTED," >> deployment-summary.json
                     echo "  \"timestamp\": \"$TIMESTAMP\"," >> deployment-summary.json
+                    echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> deployment-summary.json
+                    echo "  \"trigger_type\": \"$TRIGGER_TYPE\"," >> deployment-summary.json
                     echo "  \"outputs\": {" >> deployment-summary.json
                     echo "    \"api_url\": \"$API_URL\"," >> deployment-summary.json
                     echo "    \"frontend_url\": \"$FRONTEND_URL\"," >> deployment-summary.json
@@ -452,18 +513,34 @@ Actions:
             echo "🧪 Post-Deployment Testing"
             echo "========================="
             
-            # Only run tests on main branch
-            if [ "${CODECATALYST_SOURCE_BRANCH_NAME}" != "main" ]; then
-                echo "ℹ️ Not on main branch - skipping post-deployment tests"
+            # Source execution mode environment variables
+            source execution-mode-env.sh
+            
+            echo "📊 Execution Context:"
+            echo "  Mode: $EXECUTION_MODE"
+            echo "  Trigger: $TRIGGER_TYPE"
+            echo "  Branch: $BRANCH_NAME"
+            echo "  Skip Deployment: $SKIP_DEPLOYMENT"
+            echo "  Skip Testing: $SKIP_TESTING"
+            echo ""
+            
+            # Check if testing should be skipped based on execution mode
+            if [ "$SKIP_TESTING" = "true" ]; then
+                echo "ℹ️ Execution mode: $EXECUTION_MODE - skipping post-deployment tests"
+                echo "🔄 Trigger type: $TRIGGER_TYPE"
+                echo "🌿 Branch: $BRANCH_NAME"
                 
                 # Create placeholder test report for downstream actions
                 echo "Post-Deployment Test Report" > post-deployment-test-report.txt
                 echo "==========================" >> post-deployment-test-report.txt
                 echo "Timestamp: $(date)" >> post-deployment-test-report.txt
-                echo "Branch: ${CODECATALYST_SOURCE_BRANCH_NAME}" >> post-deployment-test-report.txt
-                echo "Status: SKIPPED (not on main branch)" >> post-deployment-test-report.txt
+                echo "Execution Mode: $EXECUTION_MODE" >> post-deployment-test-report.txt
+                echo "Trigger Type: $TRIGGER_TYPE" >> post-deployment-test-report.txt
+                echo "Branch: $BRANCH_NAME" >> post-deployment-test-report.txt
+                echo "Status: SKIPPED (execution mode: $EXECUTION_MODE)" >> post-deployment-test-report.txt
                 echo "" >> post-deployment-test-report.txt
-                echo "ℹ️ Tests skipped for non-main branch deployment" >> post-deployment-test-report.txt
+                echo "ℹ️ Tests skipped for $EXECUTION_MODE mode" >> post-deployment-test-report.txt
+                echo "🔄 Trigger: $TRIGGER_TYPE" >> post-deployment-test-report.txt
                 
                 echo "✅ Placeholder test report created for non-main branch"
                 exit 0
@@ -650,6 +727,17 @@ Actions:
             echo "📢 Deployment Status Notification"
             echo "================================"
             
+            # Source execution mode environment variables
+            source execution-mode-env.sh
+            
+            echo "📊 Execution Context:"
+            echo "  Mode: $EXECUTION_MODE"
+            echo "  Trigger: $TRIGGER_TYPE"
+            echo "  Branch: $BRANCH_NAME"
+            echo "  Skip Deployment: $SKIP_DEPLOYMENT"
+            echo "  Skip Testing: $SKIP_TESTING"
+            echo ""
+            
             # Read deployment and test results
             if [ -f "deployment-summary.json" ]; then
                 API_URL=$(jq -r '.outputs.api_url' deployment-summary.json)
@@ -657,6 +745,8 @@ Actions:
                 S3_BUCKET=$(jq -r '.outputs.s3_bucket' deployment-summary.json)
                 DEPLOYMENT_TYPE=$(jq -r '.deployment_type' deployment-summary.json)
                 HANDLER_USED=$(jq -r '.handler_used' deployment-summary.json)
+                EXECUTION_MODE_FROM_SUMMARY=$(jq -r '.execution_mode // "unknown"' deployment-summary.json)
+                TRIGGER_TYPE_FROM_SUMMARY=$(jq -r '.trigger_type // "unknown"' deployment-summary.json)
             else
                 echo "⚠️ Deployment summary not available"
                 API_URL="unknown"
@@ -664,52 +754,97 @@ Actions:
                 S3_BUCKET="unknown"
                 DEPLOYMENT_TYPE="unknown"
                 HANDLER_USED="unknown"
+                EXECUTION_MODE_FROM_SUMMARY="unknown"
+                TRIGGER_TYPE_FROM_SUMMARY="unknown"
             fi
             
-            # Create comprehensive deployment notification
-            # Create comprehensive deployment notification
-            echo "🚀 Infrastructure Deployment Completed Successfully!" > deployment-notification.txt
-            echo "==================================================" >> deployment-notification.txt
+            # Create comprehensive deployment notification based on execution mode
+            if [ "$EXECUTION_MODE" = "validation" ]; then
+                echo "🔍 Infrastructure Validation Completed!" > deployment-notification.txt
+                echo "=======================================" >> deployment-notification.txt
+            else
+                echo "🚀 Infrastructure Deployment Completed Successfully!" > deployment-notification.txt
+                echo "==================================================" >> deployment-notification.txt
+            fi
             echo "" >> deployment-notification.txt
-            echo "Deployment Information:" >> deployment-notification.txt
-            echo "======================" >> deployment-notification.txt
+            echo "Execution Information:" >> deployment-notification.txt
+            echo "=====================" >> deployment-notification.txt
             echo "Timestamp: $(date)" >> deployment-notification.txt
-            echo "Branch: ${CODECATALYST_SOURCE_BRANCH_NAME:-main}" >> deployment-notification.txt
+            echo "Execution Mode: $EXECUTION_MODE" >> deployment-notification.txt
+            echo "Trigger Type: $TRIGGER_TYPE" >> deployment-notification.txt
+            echo "Branch: $BRANCH_NAME" >> deployment-notification.txt
             echo "Commit: ${CODECATALYST_SOURCE_BRANCH_REF:-unknown}" >> deployment-notification.txt
             echo "Deployment Type: $DEPLOYMENT_TYPE" >> deployment-notification.txt
             echo "Handler Used: $HANDLER_USED" >> deployment-notification.txt
             echo "" >> deployment-notification.txt
-            echo "Deployed Resources:" >> deployment-notification.txt
-            echo "==================" >> deployment-notification.txt
-            echo "🌐 API Gateway: $API_URL" >> deployment-notification.txt
-            echo "🎨 Frontend (CloudFront): $FRONTEND_URL" >> deployment-notification.txt
-            echo "📦 S3 Bucket: $S3_BUCKET" >> deployment-notification.txt
+            if [ "$EXECUTION_MODE" = "validation" ]; then
+                echo "Validation Results:" >> deployment-notification.txt
+                echo "==================" >> deployment-notification.txt
+                echo "✅ API Code Synchronization: Validated" >> deployment-notification.txt
+                echo "✅ API Integration: Validated" >> deployment-notification.txt
+                echo "✅ Infrastructure Configuration: Validated" >> deployment-notification.txt
+                echo "⏭️ Deployment: Skipped (validation mode)" >> deployment-notification.txt
+                echo "⏭️ Testing: Skipped (validation mode)" >> deployment-notification.txt
+            else
+                echo "Deployed Resources:" >> deployment-notification.txt
+                echo "==================" >> deployment-notification.txt
+                echo "🌐 API Gateway: $API_URL" >> deployment-notification.txt
+                echo "🎨 Frontend (CloudFront): $FRONTEND_URL" >> deployment-notification.txt
+                echo "📦 S3 Bucket: $S3_BUCKET" >> deployment-notification.txt
+            fi
             echo "" >> deployment-notification.txt
             echo "Integration Status:" >> deployment-notification.txt
             echo "==================" >> deployment-notification.txt
             if [ "$DEPLOYMENT_TYPE" = "api_sync" ]; then
-                echo "✅ Registry-API code successfully integrated" >> deployment-notification.txt
+                if [ "$EXECUTION_MODE" = "validation" ]; then
+                    echo "✅ Registry-API code integration validated" >> deployment-notification.txt
+                else
+                    echo "✅ Registry-API code successfully integrated" >> deployment-notification.txt
+                fi
             else
-                echo "ℹ️ Using existing infrastructure handlers" >> deployment-notification.txt
+                if [ "$EXECUTION_MODE" = "validation" ]; then
+                    echo "ℹ️ Infrastructure handlers validation completed" >> deployment-notification.txt
+                else
+                    echo "ℹ️ Using existing infrastructure handlers" >> deployment-notification.txt
+                fi
             fi
             if [ -f "post-deployment-test-report.txt" ]; then
-                echo "✅ Post-deployment tests completed" >> deployment-notification.txt
+                if [ "$EXECUTION_MODE" = "validation" ]; then
+                    echo "⏭️ Post-deployment tests skipped (validation mode)" >> deployment-notification.txt
+                else
+                    echo "✅ Post-deployment tests completed" >> deployment-notification.txt
+                fi
             else
                 echo "⚠️ Post-deployment tests not available" >> deployment-notification.txt
             fi
             echo "" >> deployment-notification.txt
             echo "Next Steps:" >> deployment-notification.txt
             echo "==========" >> deployment-notification.txt
-            echo "1. Verify API endpoints are working correctly" >> deployment-notification.txt
-            echo "2. Update frontend configuration if needed" >> deployment-notification.txt
-            echo "3. Monitor application performance and logs" >> deployment-notification.txt
-            echo "4. Coordinate with registry-api team for any issues" >> deployment-notification.txt
+            if [ "$EXECUTION_MODE" = "validation" ]; then
+                echo "1. Review validation results and fix any issues" >> deployment-notification.txt
+                echo "2. Merge pull request after validation passes" >> deployment-notification.txt
+                echo "3. Full deployment will run automatically on main branch" >> deployment-notification.txt
+                echo "4. Monitor for any integration issues" >> deployment-notification.txt
+            else
+                echo "1. Verify API endpoints are working correctly" >> deployment-notification.txt
+                echo "2. Update frontend configuration if needed" >> deployment-notification.txt
+                echo "3. Monitor application performance and logs" >> deployment-notification.txt
+                echo "4. Coordinate with registry-api team for any issues" >> deployment-notification.txt
+            fi
             echo "" >> deployment-notification.txt
             if [ "$DEPLOYMENT_TYPE" = "api_sync" ]; then
-                echo "🔄 This deployment included synchronized code from registry-api repository" >> deployment-notification.txt
+                if [ "$EXECUTION_MODE" = "validation" ]; then
+                    echo "🔄 This validation included synchronized code from registry-api repository" >> deployment-notification.txt
+                else
+                    echo "🔄 This deployment included synchronized code from registry-api repository" >> deployment-notification.txt
+                fi
                 echo "" >> deployment-notification.txt
             fi
-            echo "Deployment completed successfully! 🎉" >> deployment-notification.txt
+            if [ "$EXECUTION_MODE" = "validation" ]; then
+                echo "Validation completed successfully! ✅" >> deployment-notification.txt
+            else
+                echo "Deployment completed successfully! 🎉" >> deployment-notification.txt
+            fi
             
             cat deployment-notification.txt
             

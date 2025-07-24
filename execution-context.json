@@ -1,0 +1,11 @@
+{
+  "execution_mode": "validation",
+  "trigger_type": "PULLREQUEST",
+  "branch_name": "feature-test",
+  "is_main_branch": false,
+  "skip_deployment": true,
+  "skip_testing": true,
+  "timestamp": "2025-07-24T19:59:05Z",
+  "commit_ref": "unknown",
+  "workflow_name": "unknown"
+}
