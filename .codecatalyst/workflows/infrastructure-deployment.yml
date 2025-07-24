@@ -5,6 +5,12 @@ Triggers:
   - Type: PUSH
     Branches:
       - main
+  - Type: PULLREQUEST
+    Branches:
+      - main
+    Events:
+      - PULLREQUEST_CREATED
+      - PULLREQUEST_REVISION_CREATED
   - Type: MANUAL
 
 Actions:
