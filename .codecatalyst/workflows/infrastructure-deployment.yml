@@ -335,6 +335,25 @@ Actions:
             # Only deploy on main branch
             if [ "${CODECATALYST_SOURCE_BRANCH_NAME}" != "main" ]; then
                 echo "ℹ️ Not on main branch - skipping deployment"
+                
+                # Create placeholder artifacts for downstream actions
+                echo "{" > deployment-summary.json
+                echo "  \"deployment_successful\": false," >> deployment-summary.json
+                echo "  \"deployment_type\": \"skipped\"," >> deployment-summary.json
+                echo "  \"api_sync_detected\": false," >> deployment-summary.json
+                echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," >> deployment-summary.json
+                echo "  \"outputs\": {" >> deployment-summary.json
+                echo "    \"api_url\": \"skipped\"," >> deployment-summary.json
+                echo "    \"frontend_url\": \"skipped\"," >> deployment-summary.json
+                echo "    \"s3_bucket\": \"skipped\"" >> deployment-summary.json
+                echo "  }," >> deployment-summary.json
+                echo "  \"handler_used\": \"skipped\"" >> deployment-summary.json
+                echo "}" >> deployment-summary.json
+                
+                # Create placeholder outputs.json
+                echo "{}" > outputs.json
+                
+                echo "✅ Placeholder artifacts created for non-main branch"
                 exit 0
             fi
             
@@ -430,6 +449,17 @@ Actions:
             # Only run tests on main branch
             if [ "${CODECATALYST_SOURCE_BRANCH_NAME}" != "main" ]; then
                 echo "ℹ️ Not on main branch - skipping post-deployment tests"
+                
+                # Create placeholder test report for downstream actions
+                echo "Post-Deployment Test Report" > post-deployment-test-report.txt
+                echo "==========================" >> post-deployment-test-report.txt
+                echo "Timestamp: $(date)" >> post-deployment-test-report.txt
+                echo "Branch: ${CODECATALYST_SOURCE_BRANCH_NAME}" >> post-deployment-test-report.txt
+                echo "Status: SKIPPED (not on main branch)" >> post-deployment-test-report.txt
+                echo "" >> post-deployment-test-report.txt
+                echo "ℹ️ Tests skipped for non-main branch deployment" >> post-deployment-test-report.txt
+                
+                echo "✅ Placeholder test report created for non-main branch"
                 exit 0
             fi
             
