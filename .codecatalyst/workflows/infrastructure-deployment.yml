@@ -273,8 +273,8 @@ Actions:
     Configuration:
       Steps:
         - Run: |
-            echo "🔍 Infrastructure Validation"
-            echo "=========================="
+            echo "🔍 Enhanced Infrastructure Validation"
+            echo "===================================="
             
             # Source execution mode environment variables
             source execution-mode-env.sh
@@ -287,6 +287,19 @@ Actions:
             echo "  Skip Testing: $SKIP_TESTING"
             echo ""
             
+            # Initialize validation results
+            VALIDATION_ERRORS=0
+            VALIDATION_WARNINGS=0
+            VALIDATION_REPORT="validation-report.txt"
+            
+            echo "Infrastructure Validation Report" > $VALIDATION_REPORT
+            echo "===============================" >> $VALIDATION_REPORT
+            echo "Timestamp: $(date)" >> $VALIDATION_REPORT
+            echo "Execution Mode: $EXECUTION_MODE" >> $VALIDATION_REPORT
+            echo "Trigger Type: $TRIGGER_TYPE" >> $VALIDATION_REPORT
+            echo "Branch: $BRANCH_NAME" >> $VALIDATION_REPORT
+            echo "" >> $VALIDATION_REPORT
+            
             # Install required tools
             echo "📦 Installing required tools..."
             curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
@@ -298,21 +311,185 @@ Actions:
             echo "Python version: $(python3 --version)"
             echo "Just version: $(just --version)"
             
-            # Check AWS credentials
-            echo "🔍 Checking AWS credentials..."
-            if aws sts get-caller-identity; then
+            # Function to log validation results
+            log_validation() {
+                local level="$1"
+                local message="$2"
+                local suggestion="${3:-}"
+                
+                echo "[$level] $message" | tee -a $VALIDATION_REPORT
+                if [ -n "$suggestion" ]; then
+                    echo "  💡 Suggestion: $suggestion" | tee -a $VALIDATION_REPORT
+                fi
+                
+                if [ "$level" = "ERROR" ]; then
+                    VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+                elif [ "$level" = "WARNING" ]; then
+                    VALIDATION_WARNINGS=$((VALIDATION_WARNINGS + 1))
+                fi
+            }
+            
+            # 1. AWS Credentials Validation
+            echo ""
+            echo "🔐 Step 1: AWS Credentials Validation"
+            echo "====================================="
+            
+            if aws sts get-caller-identity > aws-identity.json 2>&1; then
+                ACCOUNT_ID=$(jq -r '.Account' aws-identity.json)
+                USER_ARN=$(jq -r '.Arn' aws-identity.json)
                 echo "✅ AWS credentials are valid"
+                echo "  Account ID: $ACCOUNT_ID"
+                echo "  User/Role: $USER_ARN"
+                log_validation "INFO" "AWS credentials validated successfully"
+                log_validation "INFO" "Account ID: $ACCOUNT_ID"
+                log_validation "INFO" "User/Role: $USER_ARN"
             else
                 echo "❌ AWS credentials are invalid"
-                exit 1
+                log_validation "ERROR" "AWS credentials validation failed" "Check your AWS credentials and permissions"
+                VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
             fi
             
+            # 2. IAM Permission Validation
+            echo ""
+            echo "🔑 Step 2: IAM Permission Validation"
+            echo "===================================="
+            
+            echo "Testing required IAM permissions..."
+            
+            # Test DynamoDB permissions
+            if aws dynamodb describe-limits --region us-east-1 >/dev/null 2>&1; then
+                echo "  ✅ DynamoDB permissions: OK"
+                log_validation "INFO" "DynamoDB permissions validated"
+            else
+                echo "  ❌ DynamoDB permissions: FAILED"
+                log_validation "ERROR" "DynamoDB permissions insufficient" "Ensure your role has DynamoDB read/write permissions"
+            fi
+            
+            # Test Lambda permissions
+            if aws lambda list-functions --max-items 1 >/dev/null 2>&1; then
+                echo "  ✅ Lambda permissions: OK"
+                log_validation "INFO" "Lambda permissions validated"
+            else
+                echo "  ❌ Lambda permissions: FAILED"
+                log_validation "ERROR" "Lambda permissions insufficient" "Ensure your role has Lambda create/update permissions"
+            fi
+            
+            # Test S3 permissions
+            if aws s3api list-buckets >/dev/null 2>&1; then
+                echo "  ✅ S3 permissions: OK"
+                log_validation "INFO" "S3 permissions validated"
+            else
+                echo "  ❌ S3 permissions: FAILED"
+                log_validation "ERROR" "S3 permissions insufficient" "Ensure your role has S3 bucket management permissions"
+            fi
+            
+            # Test IAM permissions
+            if aws iam get-user >/dev/null 2>&1 || aws iam get-role --role-name CodeCatalystWorkflowDevelopmentRole-AWSCocha >/dev/null 2>&1; then
+                echo "  ✅ IAM permissions: OK"
+                log_validation "INFO" "IAM permissions validated"
+            else
+                echo "  ⚠️ IAM permissions: LIMITED"
+                log_validation "WARNING" "IAM permissions may be limited" "This might affect role creation during deployment"
+            fi
+            
+            # 3. Resource Configuration Validation
+            echo ""
+            echo "🏗️ Step 3: Resource Configuration Validation"
+            echo "==========================================="
+            
+            # Validate CDK stack configuration
+            if [ -f "people_register_infrastructure/people_register_infrastructure_stack.py" ]; then
+                echo "Validating CDK stack configuration..."
+                
+                # Check for common configuration issues
+                if grep -q "PYTHON_3_11" people_register_infrastructure/people_register_infrastructure_stack.py; then
+                    echo "  ⚠️ Found PYTHON_3_11 runtime - will be updated to PYTHON_3_9"
+                    log_validation "WARNING" "Lambda runtime PYTHON_3_11 detected" "Will be automatically updated to PYTHON_3_9 for compatibility"
+                fi
+                
+                # Check for hardcoded values that should be parameterized
+                if grep -q "your-jwt-secret-change-in-production" people_register_infrastructure/people_register_infrastructure_stack.py; then
+                    echo "  ⚠️ Default JWT secret detected"
+                    log_validation "WARNING" "Default JWT secret found in configuration" "Consider using AWS Secrets Manager for production deployments"
+                fi
+                
+                if grep -q "production-csrf-secret-change-this-value" people_register_infrastructure/people_register_infrastructure_stack.py; then
+                    echo "  ⚠️ Default CSRF secret detected"
+                    log_validation "WARNING" "Default CSRF secret found in configuration" "Consider using AWS Secrets Manager for production deployments"
+                fi
+                
+                # Check for proper removal policies
+                if grep -q "RemovalPolicy.DESTROY" people_register_infrastructure/people_register_infrastructure_stack.py; then
+                    echo "  ℹ️ DESTROY removal policy detected (appropriate for development)"
+                    log_validation "INFO" "DESTROY removal policy configured for development environment"
+                fi
+                
+                echo "  ✅ CDK stack configuration validated"
+                log_validation "INFO" "CDK stack configuration file validated"
+            else
+                echo "  ❌ CDK stack file not found"
+                log_validation "ERROR" "CDK stack configuration file missing" "Ensure people_register_infrastructure_stack.py exists"
+            fi
+            
+            # Validate Lambda handler files
+            echo "Validating Lambda handler configuration..."
+            LAMBDA_HANDLERS=("enhanced_api_handler.py" "auth_handler.py")
+            
+            for handler in "${LAMBDA_HANDLERS[@]}"; do
+                if [ -f "lambda/$handler" ]; then
+                    echo "  ✅ Found $handler"
+                    log_validation "INFO" "Lambda handler $handler found"
+                    
+                    # Basic syntax check
+                    if python3 -m py_compile "lambda/$handler" 2>/dev/null; then
+                        echo "    ✅ Syntax validation passed"
+                        log_validation "INFO" "Lambda handler $handler syntax validated"
+                    else
+                        echo "    ❌ Syntax validation failed"
+                        log_validation "ERROR" "Lambda handler $handler has syntax errors" "Review Python syntax in $handler"
+                    fi
+                else
+                    echo "  ❌ $handler not found"
+                    log_validation "ERROR" "Required Lambda handler $handler missing" "Ensure $handler exists in lambda/ directory"
+                fi
+            done
+            
+            # Check for integrated handler (created during API integration)
+            if [ -f "lambda/integrated_api_handler.py" ]; then
+                echo "  ✅ Found integrated_api_handler.py"
+                log_validation "INFO" "Integrated API handler found"
+            else
+                echo "  ℹ️ integrated_api_handler.py not found (will be created if API sync detected)"
+                log_validation "INFO" "Integrated API handler will be created during API integration if needed"
+            fi
+            
+            # Validate requirements.txt
+            if [ -f "lambda/requirements.txt" ]; then
+                echo "  ✅ Lambda requirements.txt found"
+                log_validation "INFO" "Lambda requirements.txt validated"
+                
+                # Check for potential dependency conflicts
+                if grep -q "boto3" lambda/requirements.txt && grep -q "botocore" lambda/requirements.txt; then
+                    echo "    ℹ️ boto3 and botocore versions should be compatible"
+                    log_validation "INFO" "boto3 and botocore dependencies found - ensure version compatibility"
+                fi
+            else
+                echo "  ❌ Lambda requirements.txt not found"
+                log_validation "ERROR" "Lambda requirements.txt missing" "Create requirements.txt with necessary Python dependencies"
+            fi
+            
+            # 4. CDK Synthesis Validation (Enhanced)
+            echo ""
+            echo "⚙️ Step 4: CDK Synthesis Validation"
+            echo "=================================="
+            
             # Fix Lambda runtime compatibility
-            echo "🔧 Fixing Lambda runtime compatibility..."
+            echo "🔧 Applying runtime compatibility fixes..."
             if [ -f "people_register_infrastructure/people_register_infrastructure_stack.py" ]; then
                 cp people_register_infrastructure/people_register_infrastructure_stack.py people_register_infrastructure/people_register_infrastructure_stack.py.backup
                 sed -i 's/runtime=_lambda\.Runtime\.PYTHON_3_11/runtime=_lambda.Runtime.PYTHON_3_9/g' people_register_infrastructure/people_register_infrastructure_stack.py
                 echo "✅ Updated Lambda runtime from PYTHON_3_11 to PYTHON_3_9"
+                log_validation "INFO" "Lambda runtime updated to PYTHON_3_9 for compatibility"
             fi
             
             # Update CDK stack to use integrated handler if API sync detected
@@ -324,6 +501,7 @@ Actions:
                 if [ -f "people_register_infrastructure/people_register_infrastructure_stack.py" ]; then
                     sed -i 's/handler="enhanced_api_handler.lambda_handler"/handler="integrated_api_handler.lambda_handler"/g' people_register_infrastructure/people_register_infrastructure_stack.py
                     echo "✅ Updated CDK stack to use integrated_api_handler"
+                    log_validation "INFO" "CDK stack updated to use integrated API handler"
                 fi
             fi
             
@@ -334,29 +512,162 @@ Actions:
             
             # Install compatible CDK dependencies
             echo "🔄 Installing compatible Python CDK dependencies..."
-            pip install aws-cdk-lib==2.80.0 constructs>=10.0.0,\<11.0.0 boto3>=1.34.0 pydantic>=2.7.0
+            if pip install aws-cdk-lib==2.80.0 constructs>=10.0.0,\<11.0.0 boto3>=1.34.0 pydantic>=2.7.0; then
+                echo "✅ CDK Python dependencies installed"
+                log_validation "INFO" "CDK Python dependencies installed successfully"
+            else
+                echo "❌ Failed to install CDK Python dependencies"
+                log_validation "ERROR" "CDK Python dependencies installation failed" "Check pip and Python environment setup"
+            fi
             
             # Install compatible CDK CLI
             echo "🔄 Installing compatible CDK CLI..."
             npm uninstall -g aws-cdk 2>/dev/null || echo "No existing CDK to uninstall"
-            npm install -g aws-cdk@2.80.0
+            if npm install -g aws-cdk@2.80.0; then
+                echo "✅ CDK CLI installed"
+                log_validation "INFO" "CDK CLI v2.80.0 installed successfully"
+            else
+                echo "❌ Failed to install CDK CLI"
+                log_validation "ERROR" "CDK CLI installation failed" "Check npm and Node.js setup"
+            fi
             
             # CDK version check
-            echo "CDK version: $(cdk --version)"
+            CDK_VERSION=$(cdk --version 2>/dev/null || echo "unknown")
+            echo "CDK version: $CDK_VERSION"
+            log_validation "INFO" "CDK version: $CDK_VERSION"
             
-            # CDK synthesis validation
-            echo "🔄 Testing CDK synthesis..."
-            if source .venv/bin/activate && cdk synth --quiet; then
+            # CDK synthesis validation with detailed error reporting
+            echo "🔄 Performing CDK synthesis validation..."
+            if source .venv/bin/activate && cdk synth --quiet > cdk-synth-output.json 2>cdk-synth-errors.txt; then
                 echo "✅ CDK synthesis validation - SUCCESS"
+                log_validation "INFO" "CDK synthesis completed successfully"
+                
+                # Analyze synthesized template for potential issues
+                if [ -f "cdk.out/PeopleRegisterInfrastructureStack.template.json" ]; then
+                    TEMPLATE_SIZE=$(wc -c < "cdk.out/PeopleRegisterInfrastructureStack.template.json")
+                    echo "  📊 CloudFormation template size: $TEMPLATE_SIZE bytes"
+                    log_validation "INFO" "CloudFormation template generated ($TEMPLATE_SIZE bytes)"
+                    
+                    # Check for template size limits (CloudFormation has a 51,200 byte limit for direct uploads)
+                    if [ $TEMPLATE_SIZE -gt 51200 ]; then
+                        echo "  ⚠️ Template size exceeds direct upload limit"
+                        log_validation "WARNING" "CloudFormation template size ($TEMPLATE_SIZE bytes) exceeds 51KB limit" "Template will be uploaded to S3 during deployment"
+                    fi
+                    
+                    # Count resources
+                    RESOURCE_COUNT=$(jq '.Resources | length' "cdk.out/PeopleRegisterInfrastructureStack.template.json" 2>/dev/null || echo "unknown")
+                    echo "  📊 CloudFormation resources: $RESOURCE_COUNT"
+                    log_validation "INFO" "CloudFormation template contains $RESOURCE_COUNT resources"
+                    
+                    # Check for resource limits (CloudFormation has a 500 resource limit)
+                    if [ "$RESOURCE_COUNT" != "unknown" ] && [ $RESOURCE_COUNT -gt 400 ]; then
+                        echo "  ⚠️ High resource count detected"
+                        log_validation "WARNING" "High resource count ($RESOURCE_COUNT) approaching CloudFormation limit" "Consider splitting into multiple stacks if approaching 500 resources"
+                    fi
+                fi
             else
-                echo "❌ CDK synthesis validation failed"
+                echo "❌ CDK synthesis validation - FAILED"
+                log_validation "ERROR" "CDK synthesis failed" "Review CDK stack configuration and dependencies"
+                
+                # Provide detailed error analysis
+                if [ -f "cdk-synth-errors.txt" ]; then
+                    echo "🔍 CDK Synthesis Error Details:"
+                    echo "==============================="
+                    cat cdk-synth-errors.txt
+                    
+                    # Analyze common error patterns and provide suggestions
+                    if grep -q "ModuleNotFoundError" cdk-synth-errors.txt; then
+                        log_validation "ERROR" "Python module import error detected" "Check that all required Python packages are installed in the virtual environment"
+                    fi
+                    
+                    if grep -q "ValidationError" cdk-synth-errors.txt; then
+                        log_validation "ERROR" "CDK validation error detected" "Review CDK construct configuration and property values"
+                    fi
+                    
+                    if grep -q "Cannot find module" cdk-synth-errors.txt; then
+                        log_validation "ERROR" "Node.js module error detected" "Check that CDK CLI and dependencies are properly installed"
+                    fi
+                    
+                    if grep -q "Credentials" cdk-synth-errors.txt; then
+                        log_validation "ERROR" "AWS credentials error during synthesis" "Verify AWS credentials and permissions"
+                    fi
+                fi
+                
+                VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
+            fi
+            
+            # 5. Generate Validation Summary
+            echo ""
+            echo "📋 Step 5: Validation Summary"
+            echo "============================"
+            
+            echo "" >> $VALIDATION_REPORT
+            echo "VALIDATION SUMMARY" >> $VALIDATION_REPORT
+            echo "==================" >> $VALIDATION_REPORT
+            echo "Total Errors: $VALIDATION_ERRORS" >> $VALIDATION_REPORT
+            echo "Total Warnings: $VALIDATION_WARNINGS" >> $VALIDATION_REPORT
+            echo "" >> $VALIDATION_REPORT
+            
+            if [ $VALIDATION_ERRORS -eq 0 ]; then
+                echo "✅ Infrastructure validation completed successfully"
+                echo "  Errors: $VALIDATION_ERRORS"
+                echo "  Warnings: $VALIDATION_WARNINGS"
+                log_validation "INFO" "Infrastructure validation completed successfully"
+                
+                # Create validation success artifact
+                echo "{" > validation-results.json
+                echo "  \"status\": \"success\"," >> validation-results.json
+                echo "  \"errors\": $VALIDATION_ERRORS," >> validation-results.json
+                echo "  \"warnings\": $VALIDATION_WARNINGS," >> validation-results.json
+                echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," >> validation-results.json
+                echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> validation-results.json
+                echo "  \"cdk_synthesis\": \"success\"," >> validation-results.json
+                echo "  \"iam_permissions\": \"validated\"," >> validation-results.json
+                echo "  \"resource_configuration\": \"validated\"" >> validation-results.json
+                echo "}" >> validation-results.json
+            else
+                echo "❌ Infrastructure validation failed"
+                echo "  Errors: $VALIDATION_ERRORS"
+                echo "  Warnings: $VALIDATION_WARNINGS"
+                echo ""
+                echo "🔍 Please review the validation report for detailed error information and suggested fixes."
+                log_validation "ERROR" "Infrastructure validation failed with $VALIDATION_ERRORS errors"
+                
+                # Create validation failure artifact
+                echo "{" > validation-results.json
+                echo "  \"status\": \"failed\"," >> validation-results.json
+                echo "  \"errors\": $VALIDATION_ERRORS," >> validation-results.json
+                echo "  \"warnings\": $VALIDATION_WARNINGS," >> validation-results.json
+                echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," >> validation-results.json
+                echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> validation-results.json
+                echo "  \"cdk_synthesis\": \"failed\"," >> validation-results.json
+                echo "  \"iam_permissions\": \"checked\"," >> validation-results.json
+                echo "  \"resource_configuration\": \"checked\"" >> validation-results.json
+                echo "}" >> validation-results.json
+                
+                # Display validation report
+                echo ""
+                echo "📋 VALIDATION REPORT:"
+                echo "===================="
+                cat $VALIDATION_REPORT
+                
                 exit 1
             fi
             
-            echo "✅ Infrastructure validation completed successfully"
+            echo ""
+            echo "📋 Full validation report saved to: $VALIDATION_REPORT"
+            echo "📊 Validation results saved to: validation-results.json"
       Container:
         Registry: CODECATALYST
         Image: CodeCatalystLinux_x86_64:2024_03
+    Outputs:
+      Artifacts:
+        - Name: validationResults
+          Files:
+            - "validation-report.txt"
+            - "validation-results.json"
+            - "cdk-synth-output.json"
+            - "cdk-synth-errors.txt"
 
   DeployInfrastructure:
     Identifier: aws/build@v1
