@@ -686,11 +686,12 @@ Actions:
       Artifacts:
         - deploymentContext
         - apiIntegration
+        - validationResults
     Configuration:
       Steps:
         - Run: |
-            echo "🚀 Infrastructure Deployment"
-            echo "=========================="
+            echo "🚀 Infrastructure Deployment Stage"
+            echo "================================="
             
             # Source execution mode environment variables
             source execution-mode-env.sh
@@ -703,93 +704,290 @@ Actions:
             echo "  Skip Testing: $SKIP_TESTING"
             echo ""
             
-            # Check if deployment should be skipped based on execution mode
+            # Read deployment context for consistent artifact creation
+            API_SYNC_DETECTED=$(jq -r '.api_sync_detected // false' deployment-context.json 2>/dev/null || echo "false")
+            DEPLOYMENT_TYPE=$(jq -r '.deployment_type // "infrastructure_only"' deployment-context.json 2>/dev/null || echo "infrastructure_only")
+            TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            
+            echo "📋 Deployment Context:"
+            echo "  API Sync Detected: $API_SYNC_DETECTED"
+            echo "  Deployment Type: $DEPLOYMENT_TYPE"
+            echo "  Timestamp: $TIMESTAMP"
+            echo ""
+            
+            # Determine execution mode and create appropriate artifacts
             if [ "$SKIP_DEPLOYMENT" = "true" ]; then
-                echo "ℹ️ Execution mode: $EXECUTION_MODE - skipping deployment"
+                echo "🔍 VALIDATION MODE - Creating placeholder artifacts"
+                echo "=================================================="
+                echo "ℹ️ Execution mode: $EXECUTION_MODE"
                 echo "🔄 Trigger type: $TRIGGER_TYPE"
                 echo "🌿 Branch: $BRANCH_NAME"
+                echo "⏭️ Skipping actual infrastructure deployment"
+                echo ""
                 
-                # Create placeholder artifacts for downstream actions
-                echo "{" > deployment-summary.json
-                echo "  \"deployment_successful\": false," >> deployment-summary.json
-                echo "  \"deployment_type\": \"skipped\"," >> deployment-summary.json
-                echo "  \"api_sync_detected\": false," >> deployment-summary.json
-                echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," >> deployment-summary.json
-                echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> deployment-summary.json
-                echo "  \"trigger_type\": \"$TRIGGER_TYPE\"," >> deployment-summary.json
-                echo "  \"skip_reason\": \"Execution mode: $EXECUTION_MODE\"," >> deployment-summary.json
-                echo "  \"outputs\": {" >> deployment-summary.json
-                echo "    \"api_url\": \"skipped\"," >> deployment-summary.json
-                echo "    \"frontend_url\": \"skipped\"," >> deployment-summary.json
-                echo "    \"s3_bucket\": \"skipped\"" >> deployment-summary.json
-                echo "  }," >> deployment-summary.json
-                echo "  \"handler_used\": \"skipped\"" >> deployment-summary.json
-                echo "}" >> deployment-summary.json
+                # Read validation results to include in placeholder
+                VALIDATION_STATUS="unknown"
+                if [ -f "validation-results.json" ]; then
+                    VALIDATION_STATUS=$(jq -r '.status // "unknown"' validation-results.json 2>/dev/null || echo "unknown")
+                    echo "📊 Validation Status: $VALIDATION_STATUS"
+                fi
                 
-                # Create placeholder outputs.json
-                echo "{}" > outputs.json
+                # Create comprehensive placeholder deployment summary
+                echo "📝 Creating placeholder deployment summary..."
+                cat > deployment-summary.json << EOF
+{
+  "deployment_successful": false,
+  "deployment_type": "validation_placeholder",
+  "api_sync_detected": $API_SYNC_DETECTED,
+  "timestamp": "$TIMESTAMP",
+  "execution_mode": "$EXECUTION_MODE",
+  "trigger_type": "$TRIGGER_TYPE",
+  "branch_name": "$BRANCH_NAME",
+  "skip_reason": "Validation mode - deployment skipped for $TRIGGER_TYPE trigger",
+  "validation_status": "$VALIDATION_STATUS",
+  "outputs": {
+    "api_url": "https://validation-placeholder.example.com/api",
+    "frontend_url": "https://validation-placeholder.example.com",
+    "s3_bucket": "validation-placeholder-bucket"
+  },
+  "handler_used": "validation_placeholder",
+  "infrastructure_changes": "none",
+  "deployment_duration": "0s",
+  "resources_created": 0,
+  "resources_updated": 0,
+  "resources_deleted": 0,
+  "stack_status": "validation_only",
+  "compatibility_mode": true
+}
+EOF
                 
-                echo "✅ Placeholder artifacts created for non-main branch"
+                # Create placeholder outputs.json with consistent structure
+                echo "📝 Creating placeholder outputs..."
+                cat > outputs.json << EOF
+{
+  "PeopleRegisterInfrastructureStack": {
+    "ApiUrl": "https://validation-placeholder.example.com/api",
+    "FrontendUrl": "https://validation-placeholder.example.com",
+    "S3BucketName": "validation-placeholder-bucket",
+    "ValidationMode": true,
+    "ExecutionMode": "$EXECUTION_MODE",
+    "TriggerType": "$TRIGGER_TYPE"
+  }
+}
+EOF
+                
+                # Create deployment log for consistency
+                echo "📝 Creating deployment log..."
+                cat > deployment.log << EOF
+Infrastructure Deployment Log - Validation Mode
+==============================================
+Timestamp: $TIMESTAMP
+Execution Mode: $EXECUTION_MODE
+Trigger Type: $TRIGGER_TYPE
+Branch: $BRANCH_NAME
+
+VALIDATION MODE ACTIVE
+=====================
+- Actual deployment skipped
+- Placeholder artifacts created
+- Validation status: $VALIDATION_STATUS
+- API sync detected: $API_SYNC_DETECTED
+- Deployment type: $DEPLOYMENT_TYPE
+
+Placeholder Resources Created:
+- API URL: https://validation-placeholder.example.com/api
+- Frontend URL: https://validation-placeholder.example.com
+- S3 Bucket: validation-placeholder-bucket
+
+Status: Validation mode completed successfully
+EOF
+                
+                echo "✅ Placeholder artifacts created successfully"
+                echo "📊 Deployment Summary (Validation Mode):"
+                cat deployment-summary.json | jq '.' 2>/dev/null || cat deployment-summary.json
+                echo ""
+                echo "🎯 Validation mode execution completed - ready for downstream stages"
                 exit 0
             fi
             
-            # Setup environment
+            echo "🏗️ DEPLOYMENT MODE - Executing actual infrastructure deployment"
+            echo "=============================================================="
+            echo "✅ Execution mode: $EXECUTION_MODE"
+            echo "🔄 Trigger type: $TRIGGER_TYPE"
+            echo "🌿 Branch: $BRANCH_NAME"
+            echo "🚀 Proceeding with actual infrastructure deployment"
+            echo ""
+            
+            # Setup Python environment for deployment
+            echo "🔧 Setting up deployment environment..."
             python3 -m venv .venv
             source .venv/bin/activate
-            pip install aws-cdk-lib==2.80.0 constructs>=10.0.0,\<11.0.0 boto3>=1.34.0 pydantic>=2.7.0
-            npm install -g aws-cdk@2.80.0
             
-            # Read deployment context
-            API_SYNC_DETECTED=$(jq -r '.api_sync_detected' deployment-context.json)
-            DEPLOYMENT_TYPE=$(jq -r '.deployment_type' deployment-context.json)
+            # Install CDK dependencies with error handling
+            echo "📦 Installing CDK dependencies..."
+            if ! pip install aws-cdk-lib==2.80.0 constructs>=10.0.0,\<11.0.0 boto3>=1.34.0 pydantic>=2.7.0; then
+                echo "❌ Failed to install Python CDK dependencies"
+                exit 1
+            fi
             
+            # Install CDK CLI with error handling
+            echo "📦 Installing CDK CLI..."
+            npm uninstall -g aws-cdk 2>/dev/null || echo "No existing CDK to uninstall"
+            if ! npm install -g aws-cdk@2.80.0; then
+                echo "❌ Failed to install CDK CLI"
+                exit 1
+            fi
+            
+            echo "✅ Deployment environment setup completed"
+            echo ""
+            
+            # Pre-deployment validation
+            echo "🔍 Pre-deployment validation..."
+            if ! aws sts get-caller-identity > /dev/null 2>&1; then
+                echo "❌ AWS credentials validation failed"
+                exit 1
+            fi
+            echo "✅ AWS credentials validated"
+            
+            # Start deployment with comprehensive logging
             echo "🏗️ Starting CDK deployment..."
             echo "Deployment type: $DEPLOYMENT_TYPE"
             echo "API sync detected: $API_SYNC_DETECTED"
+            echo "Handler selection: $([ "$API_SYNC_DETECTED" = "true" ] && echo "integrated_api_handler" || echo "enhanced_api_handler")"
+            echo ""
             
-            # Deploy infrastructure
-            if source .venv/bin/activate && cdk deploy --require-approval never --outputs-file outputs.json; then
-                echo "✅ CDK deployment - SUCCESS"
+            # Record deployment start time
+            DEPLOYMENT_START=$(date +%s)
+            
+            # Execute CDK deployment with detailed error handling
+            echo "🚀 Executing CDK deployment..."
+            if source .venv/bin/activate && cdk deploy --require-approval never --outputs-file outputs.json 2>&1 | tee deployment.log; then
+                DEPLOYMENT_END=$(date +%s)
+                DEPLOYMENT_DURATION=$((DEPLOYMENT_END - DEPLOYMENT_START))
                 
-                # Extract deployment outputs
+                echo "✅ CDK deployment completed successfully"
+                echo "⏱️ Deployment duration: ${DEPLOYMENT_DURATION}s"
+                echo ""
+                
+                # Extract and validate deployment outputs
                 echo "🔍 Extracting deployment outputs..."
                 if [ -f "outputs.json" ]; then
-                    API_URL=$(cat outputs.json | jq -r '.PeopleRegisterInfrastructureStack.ApiUrl // empty')
-                    FRONTEND_URL=$(cat outputs.json | jq -r '.PeopleRegisterInfrastructureStack.FrontendUrl // empty')
-                    S3_BUCKET=$(cat outputs.json | jq -r '.PeopleRegisterInfrastructureStack.S3BucketName // empty')
+                    # Extract outputs with fallback values
+                    API_URL=$(jq -r '.PeopleRegisterInfrastructureStack.ApiUrl // "not_available"' outputs.json 2>/dev/null || echo "not_available")
+                    FRONTEND_URL=$(jq -r '.PeopleRegisterInfrastructureStack.FrontendUrl // "not_available"' outputs.json 2>/dev/null || echo "not_available")
+                    S3_BUCKET=$(jq -r '.PeopleRegisterInfrastructureStack.S3BucketName // "not_available"' outputs.json 2>/dev/null || echo "not_available")
                     
-                    echo "📊 DEPLOYMENT INFORMATION:"
-                    echo "API URL: $API_URL"
-                    echo "Frontend URL: $FRONTEND_URL"
-                    echo "S3 Bucket: $S3_BUCKET"
+                    echo "📊 DEPLOYMENT OUTPUTS:"
+                    echo "====================="
+                    echo "🌐 API URL: $API_URL"
+                    echo "🎨 Frontend URL: $FRONTEND_URL"
+                    echo "📦 S3 Bucket: $S3_BUCKET"
+                    echo ""
                     
-                    # Create deployment summary
+                    # Validate critical outputs
+                    if [ "$API_URL" = "not_available" ] || [ "$API_URL" = "null" ]; then
+                        echo "⚠️ Warning: API URL not available in deployment outputs"
+                    fi
+                    
+                    # Determine handler used
                     HANDLER_USED=$([ "$API_SYNC_DETECTED" = "true" ] && echo "integrated_api_handler" || echo "enhanced_api_handler")
-                    TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
                     
-                    echo "{" > deployment-summary.json
-                    echo "  \"deployment_successful\": true," >> deployment-summary.json
-                    echo "  \"deployment_type\": \"$DEPLOYMENT_TYPE\"," >> deployment-summary.json
-                    echo "  \"api_sync_detected\": $API_SYNC_DETECTED," >> deployment-summary.json
-                    echo "  \"timestamp\": \"$TIMESTAMP\"," >> deployment-summary.json
-                    echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> deployment-summary.json
-                    echo "  \"trigger_type\": \"$TRIGGER_TYPE\"," >> deployment-summary.json
-                    echo "  \"outputs\": {" >> deployment-summary.json
-                    echo "    \"api_url\": \"$API_URL\"," >> deployment-summary.json
-                    echo "    \"frontend_url\": \"$FRONTEND_URL\"," >> deployment-summary.json
-                    echo "    \"s3_bucket\": \"$S3_BUCKET\"" >> deployment-summary.json
-                    echo "  }," >> deployment-summary.json
-                    echo "  \"handler_used\": \"$HANDLER_USED\"" >> deployment-summary.json
-                    echo "}" >> deployment-summary.json
+                    # Create comprehensive deployment summary
+                    echo "📝 Creating deployment summary..."
+                    cat > deployment-summary.json << EOF
+{
+  "deployment_successful": true,
+  "deployment_type": "$DEPLOYMENT_TYPE",
+  "api_sync_detected": $API_SYNC_DETECTED,
+  "timestamp": "$TIMESTAMP",
+  "execution_mode": "$EXECUTION_MODE",
+  "trigger_type": "$TRIGGER_TYPE",
+  "branch_name": "$BRANCH_NAME",
+  "deployment_duration": "${DEPLOYMENT_DURATION}s",
+  "outputs": {
+    "api_url": "$API_URL",
+    "frontend_url": "$FRONTEND_URL",
+    "s3_bucket": "$S3_BUCKET"
+  },
+  "handler_used": "$HANDLER_USED",
+  "infrastructure_changes": "deployed",
+  "stack_status": "deployed",
+  "compatibility_mode": false,
+  "deployment_metadata": {
+    "cdk_version": "2.80.0",
+    "deployment_start": $DEPLOYMENT_START,
+    "deployment_end": $DEPLOYMENT_END,
+    "aws_region": "${AWS_DEFAULT_REGION:-us-east-1}"
+  }
+}
+EOF
                     
-                    cat deployment-summary.json
-                    echo "✅ Infrastructure deployment completed successfully"
+                    echo "✅ Deployment summary created"
+                    echo "📊 Final Deployment Summary:"
+                    cat deployment-summary.json | jq '.' 2>/dev/null || cat deployment-summary.json
+                    echo ""
+                    echo "🎉 Infrastructure deployment completed successfully!"
+                    
                 else
-                    echo "⚠️ outputs.json not found"
+                    echo "❌ Deployment outputs file not found"
+                    echo "🔍 Checking for CDK deployment issues..."
+                    
+                    # Create error summary
+                    cat > deployment-summary.json << EOF
+{
+  "deployment_successful": false,
+  "deployment_type": "$DEPLOYMENT_TYPE",
+  "api_sync_detected": $API_SYNC_DETECTED,
+  "timestamp": "$TIMESTAMP",
+  "execution_mode": "$EXECUTION_MODE",
+  "trigger_type": "$TRIGGER_TYPE",
+  "branch_name": "$BRANCH_NAME",
+  "error": "Deployment outputs not available",
+  "outputs": {
+    "api_url": "deployment_failed",
+    "frontend_url": "deployment_failed",
+    "s3_bucket": "deployment_failed"
+  },
+  "handler_used": "deployment_failed",
+  "infrastructure_changes": "failed",
+  "stack_status": "failed"
+}
+EOF
+                    
+                    echo "❌ Deployment failed - outputs not available"
                     exit 1
                 fi
             else
                 echo "❌ CDK deployment failed"
+                echo "🔍 Deployment error details:"
+                tail -20 deployment.log 2>/dev/null || echo "No deployment log available"
+                
+                # Create failure summary
+                cat > deployment-summary.json << EOF
+{
+  "deployment_successful": false,
+  "deployment_type": "$DEPLOYMENT_TYPE",
+  "api_sync_detected": $API_SYNC_DETECTED,
+  "timestamp": "$TIMESTAMP",
+  "execution_mode": "$EXECUTION_MODE",
+  "trigger_type": "$TRIGGER_TYPE",
+  "branch_name": "$BRANCH_NAME",
+  "error": "CDK deployment failed",
+  "outputs": {
+    "api_url": "deployment_failed",
+    "frontend_url": "deployment_failed",
+    "s3_bucket": "deployment_failed"
+  },
+  "handler_used": "deployment_failed",
+  "infrastructure_changes": "failed",
+  "stack_status": "failed"
+}
+EOF
+                
+                # Ensure outputs.json exists for downstream compatibility
+                echo "{}" > outputs.json
+                
+                echo "❌ Infrastructure deployment failed"
                 exit 1
             fi
       Container:
@@ -801,6 +999,7 @@ Actions:
           Files:
             - "deployment-summary.json"
             - "outputs.json"
+            - "deployment.log"
 
   PostDeploymentTests:
     Identifier: aws/build@v1
