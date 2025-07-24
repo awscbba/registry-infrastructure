@@ -106,106 +106,67 @@ Actions:
                 echo "🔄 Integrating synchronized API code with infrastructure"
                 
                 # Create integrated Lambda handler that uses the new API structure
-                cat > lambda/integrated_api_handler.py << 'INTEGRATED_HANDLER'
-"""
-Integrated API Handler - Bridges registry-api code with Lambda infrastructure
-This handler integrates the FastAPI application from registry-api with AWS Lambda
-"""
-import json
-import logging
-import os
-import sys
-from typing import Dict, Any
-
-# Add the src directory to Python path for registry-api imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
-    """
-    AWS Lambda handler that integrates registry-api FastAPI application
-    """
-    try:
-        logger.info(f"Received event: {json.dumps(event, default=str)}")
-        
-        # Import the FastAPI app from registry-api
-        try:
-            from main import app
-            from mangum import Mangum
-            
-            # Create Mangum handler for FastAPI
-            handler = Mangum(app, lifespan="off")
-            
-            # Process the request
-            response = handler(event, context)
-            
-            logger.info(f"Response status: {response.get('statusCode', 'unknown')}")
-            return response
-            
-        except ImportError as e:
-            logger.error(f"Failed to import registry-api components: {str(e)}")
-            
-            # Fallback to existing enhanced_api_handler if registry-api import fails
-            try:
-                from enhanced_api_handler import lambda_handler as fallback_handler
-                logger.info("Using fallback enhanced_api_handler")
-                return fallback_handler(event, context)
-            except ImportError:
-                logger.error("Fallback handler also not available")
-                return {
-                    "statusCode": 500,
-                    "headers": {
-                        "Content-Type": "application/json",
-                        "Access-Control-Allow-Origin": "*"
-                    },
-                    "body": json.dumps({
-                        "error": "API handler not available",
-                        "message": "Neither registry-api nor fallback handler could be loaded"
-                    })
-                }
-        
-    except Exception as e:
-        logger.error(f"Lambda handler error: {str(e)}", exc_info=True)
-        return {
-            "statusCode": 500,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": "*",
-                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
-                "Access-Control-Allow-Headers": "Content-Type, Authorization"
-            },
-            "body": json.dumps({
-                "error": "Internal Server Error",
-                "message": "An unexpected error occurred"
-            })
-        }
-INTEGRATED_HANDLER
+                echo "Creating integrated API handler..."
+                mkdir -p lambda
+                
+                # Create a basic integrated handler file
+                echo "# Integrated API Handler - Bridges registry-api code with Lambda infrastructure" > lambda/integrated_api_handler.py
+                echo "import json" >> lambda/integrated_api_handler.py
+                echo "import logging" >> lambda/integrated_api_handler.py
+                echo "import os" >> lambda/integrated_api_handler.py
+                echo "import sys" >> lambda/integrated_api_handler.py
+                echo "from typing import Dict, Any" >> lambda/integrated_api_handler.py
+                echo "" >> lambda/integrated_api_handler.py
+                echo "# Add the src directory to Python path for registry-api imports" >> lambda/integrated_api_handler.py
+                echo "sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))" >> lambda/integrated_api_handler.py
+                echo "" >> lambda/integrated_api_handler.py
+                echo "# Configure logging" >> lambda/integrated_api_handler.py
+                echo "logging.basicConfig(level=logging.INFO)" >> lambda/integrated_api_handler.py
+                echo "logger = logging.getLogger(__name__)" >> lambda/integrated_api_handler.py
+                echo "" >> lambda/integrated_api_handler.py
+                echo "def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:" >> lambda/integrated_api_handler.py
+                echo "    try:" >> lambda/integrated_api_handler.py
+                echo "        logger.info(f'Received event: {json.dumps(event, default=str)}')" >> lambda/integrated_api_handler.py
+                echo "        try:" >> lambda/integrated_api_handler.py
+                echo "            from main import app" >> lambda/integrated_api_handler.py
+                echo "            from mangum import Mangum" >> lambda/integrated_api_handler.py
+                echo "            handler = Mangum(app, lifespan='off')" >> lambda/integrated_api_handler.py
+                echo "            response = handler(event, context)" >> lambda/integrated_api_handler.py
+                echo "            logger.info(f'Response status: {response.get(\"statusCode\", \"unknown\")}')" >> lambda/integrated_api_handler.py
+                echo "            return response" >> lambda/integrated_api_handler.py
+                echo "        except ImportError as e:" >> lambda/integrated_api_handler.py
+                echo "            logger.error(f'Failed to import registry-api components: {str(e)}')" >> lambda/integrated_api_handler.py
+                echo "            try:" >> lambda/integrated_api_handler.py
+                echo "                from enhanced_api_handler import lambda_handler as fallback_handler" >> lambda/integrated_api_handler.py
+                echo "                logger.info('Using fallback enhanced_api_handler')" >> lambda/integrated_api_handler.py
+                echo "                return fallback_handler(event, context)" >> lambda/integrated_api_handler.py
+                echo "            except ImportError:" >> lambda/integrated_api_handler.py
+                echo "                return {'statusCode': 500, 'body': json.dumps({'error': 'API handler not available'})}" >> lambda/integrated_api_handler.py
+                echo "    except Exception as e:" >> lambda/integrated_api_handler.py
+                echo "        logger.error(f'Lambda handler error: {str(e)}', exc_info=True)" >> lambda/integrated_api_handler.py
+                echo "        return {'statusCode': 500, 'body': json.dumps({'error': 'Internal Server Error'})}" >> lambda/integrated_api_handler.py
                 
                 # Update requirements.txt to include registry-api dependencies
                 if [ -f "lambda/requirements.txt" ]; then
                     echo "📦 Merging requirements from registry-api"
                     
                     # Create merged requirements
-                    cat > lambda/requirements_merged.txt << 'REQUIREMENTS'
-# Infrastructure requirements (existing)
-boto3==1.34.144
-botocore==1.34.144
-pydantic==2.10.3
-bcrypt==4.1.3
-pyjwt==2.8.0
-python-json-logger==2.0.7
-
-# Registry-API requirements (synchronized)
-fastapi==0.111.0
-mangum==0.17.0
-python-multipart>=0.0.7
-pytest==8.2.2
-pytest-mock==3.14.0
-moto==5.0.9
-REQUIREMENTS
+                    # Create merged requirements file
+                    echo "# Infrastructure requirements (existing)" > lambda/requirements_merged.txt
+                    echo "boto3==1.34.144" >> lambda/requirements_merged.txt
+                    echo "botocore==1.34.144" >> lambda/requirements_merged.txt
+                    echo "pydantic==2.10.3" >> lambda/requirements_merged.txt
+                    echo "bcrypt==4.1.3" >> lambda/requirements_merged.txt
+                    echo "pyjwt==2.8.0" >> lambda/requirements_merged.txt
+                    echo "python-json-logger==2.0.7" >> lambda/requirements_merged.txt
+                    echo "" >> lambda/requirements_merged.txt
+                    echo "# Registry-API requirements (synchronized)" >> lambda/requirements_merged.txt
+                    echo "fastapi==0.111.0" >> lambda/requirements_merged.txt
+                    echo "mangum==0.17.0" >> lambda/requirements_merged.txt
+                    echo "python-multipart>=0.0.7" >> lambda/requirements_merged.txt
+                    echo "pytest==8.2.2" >> lambda/requirements_merged.txt
+                    echo "pytest-mock==3.14.0" >> lambda/requirements_merged.txt
+                    echo "moto==5.0.9" >> lambda/requirements_merged.txt
                     
                     # Replace original requirements
                     mv lambda/requirements_merged.txt lambda/requirements.txt
@@ -221,22 +182,26 @@ REQUIREMENTS
             fi
             
             # Create integration summary
-            cat > api-integration-summary.txt << 'INTEGRATION_SUMMARY'
-API Integration Summary
-======================
-Timestamp: $(date)
-Deployment Type: $DEPLOYMENT_TYPE
-API Sync Detected: $API_SYNC_DETECTED
-
-Integration Actions:
-$([ "$API_SYNC_DETECTED" = "true" ] && echo "✅ Created integrated_api_handler.py" || echo "ℹ️ No integration needed")
-$([ "$API_SYNC_DETECTED" = "true" ] && echo "✅ Merged requirements.txt" || echo "ℹ️ Using existing requirements")
-
-Handler Priority:
-1. integrated_api_handler.py (if API sync detected)
-2. enhanced_api_handler.py (fallback)
-3. api_handler.py (legacy fallback)
-INTEGRATION_SUMMARY
+            # Create integration summary
+            echo "API Integration Summary" > api-integration-summary.txt
+            echo "======================" >> api-integration-summary.txt
+            echo "Timestamp: $(date)" >> api-integration-summary.txt
+            echo "Deployment Type: $DEPLOYMENT_TYPE" >> api-integration-summary.txt
+            echo "API Sync Detected: $API_SYNC_DETECTED" >> api-integration-summary.txt
+            echo "" >> api-integration-summary.txt
+            echo "Integration Actions:" >> api-integration-summary.txt
+            if [ "$API_SYNC_DETECTED" = "true" ]; then
+                echo "✅ Created integrated_api_handler.py" >> api-integration-summary.txt
+                echo "✅ Merged requirements.txt" >> api-integration-summary.txt
+            else
+                echo "ℹ️ No integration needed" >> api-integration-summary.txt
+                echo "ℹ️ Using existing requirements" >> api-integration-summary.txt
+            fi
+            echo "" >> api-integration-summary.txt
+            echo "Handler Priority:" >> api-integration-summary.txt
+            echo "1. integrated_api_handler.py (if API sync detected)" >> api-integration-summary.txt
+            echo "2. enhanced_api_handler.py (fallback)" >> api-integration-summary.txt
+            echo "3. api_handler.py (legacy fallback)" >> api-integration-summary.txt
             
             cat api-integration-summary.txt
             echo "✅ API integration preparation completed"
@@ -404,20 +369,21 @@ INTEGRATION_SUMMARY
                     echo "S3 Bucket: $S3_BUCKET"
                     
                     # Create deployment summary
-                    cat > deployment-summary.json << 'DEPLOYMENT_SUMMARY'
-{
-  "deployment_successful": true,
-  "deployment_type": "$DEPLOYMENT_TYPE",
-  "api_sync_detected": $API_SYNC_DETECTED,
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "outputs": {
-    "api_url": "$API_URL",
-    "frontend_url": "$FRONTEND_URL",
-    "s3_bucket": "$S3_BUCKET"
-  },
-  "handler_used": "$([ "$API_SYNC_DETECTED" = "true" ] && echo "integrated_api_handler" || echo "enhanced_api_handler")"
-}
-DEPLOYMENT_SUMMARY
+                    HANDLER_USED=$([ "$API_SYNC_DETECTED" = "true" ] && echo "integrated_api_handler" || echo "enhanced_api_handler")
+                    TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+                    
+                    echo "{" > deployment-summary.json
+                    echo "  \"deployment_successful\": true," >> deployment-summary.json
+                    echo "  \"deployment_type\": \"$DEPLOYMENT_TYPE\"," >> deployment-summary.json
+                    echo "  \"api_sync_detected\": $API_SYNC_DETECTED," >> deployment-summary.json
+                    echo "  \"timestamp\": \"$TIMESTAMP\"," >> deployment-summary.json
+                    echo "  \"outputs\": {" >> deployment-summary.json
+                    echo "    \"api_url\": \"$API_URL\"," >> deployment-summary.json
+                    echo "    \"frontend_url\": \"$FRONTEND_URL\"," >> deployment-summary.json
+                    echo "    \"s3_bucket\": \"$S3_BUCKET\"" >> deployment-summary.json
+                    echo "  }," >> deployment-summary.json
+                    echo "  \"handler_used\": \"$HANDLER_USED\"" >> deployment-summary.json
+                    echo "}" >> deployment-summary.json
                     
                     cat deployment-summary.json
                     echo "✅ Infrastructure deployment completed successfully"
@@ -571,22 +537,41 @@ DEPLOYMENT_SUMMARY
             test_endpoint "/people/search" "200" "People search endpoint" || echo "⚠️ Search endpoint not available (non-critical)"
             
             # Generate test report
-            cat > post-deployment-test-report.txt << 'TEST_REPORT'
-Post-Deployment Test Report
-==========================
-Timestamp: $(date)
-API URL: $API_URL
-Deployment Type: $DEPLOYMENT_TYPE
-Handler Used: $HANDLER_USED
-Overall Status: $([ "$TESTS_PASSED" = true ] && echo "PASSED" || echo "FAILED")
-
-Test Results:
-- Health endpoint: $(test_endpoint "/health" "200" "Health endpoint" >/dev/null 2>&1 && echo "PASS" || echo "FAIL")
-- People list: $(test_endpoint "/people" "200" "People list endpoint" >/dev/null 2>&1 && echo "PASS" || echo "FAIL")
-- Person CRUD: $([ "$create_response" = "201" ] && echo "PASS" || echo "FAIL")
-
-$([ "$TESTS_PASSED" = true ] && echo "✅ All critical tests passed" || echo "❌ Some tests failed")
-TEST_REPORT
+            # Generate test report
+            echo "Post-Deployment Test Report" > post-deployment-test-report.txt
+            echo "==========================" >> post-deployment-test-report.txt
+            echo "Timestamp: $(date)" >> post-deployment-test-report.txt
+            echo "API URL: $API_URL" >> post-deployment-test-report.txt
+            echo "Deployment Type: $DEPLOYMENT_TYPE" >> post-deployment-test-report.txt
+            echo "Handler Used: $HANDLER_USED" >> post-deployment-test-report.txt
+            if [ "$TESTS_PASSED" = true ]; then
+                echo "Overall Status: PASSED" >> post-deployment-test-report.txt
+            else
+                echo "Overall Status: FAILED" >> post-deployment-test-report.txt
+            fi
+            echo "" >> post-deployment-test-report.txt
+            echo "Test Results:" >> post-deployment-test-report.txt
+            if test_endpoint "/health" "200" "Health endpoint" >/dev/null 2>&1; then
+                echo "- Health endpoint: PASS" >> post-deployment-test-report.txt
+            else
+                echo "- Health endpoint: FAIL" >> post-deployment-test-report.txt
+            fi
+            if test_endpoint "/people" "200" "People list endpoint" >/dev/null 2>&1; then
+                echo "- People list: PASS" >> post-deployment-test-report.txt
+            else
+                echo "- People list: FAIL" >> post-deployment-test-report.txt
+            fi
+            if [ "$create_response" = "201" ]; then
+                echo "- Person CRUD: PASS" >> post-deployment-test-report.txt
+            else
+                echo "- Person CRUD: FAIL" >> post-deployment-test-report.txt
+            fi
+            echo "" >> post-deployment-test-report.txt
+            if [ "$TESTS_PASSED" = true ]; then
+                echo "✅ All critical tests passed" >> post-deployment-test-report.txt
+            else
+                echo "❌ Some tests failed" >> post-deployment-test-report.txt
+            fi
             
             cat post-deployment-test-report.txt
             
@@ -646,40 +631,49 @@ TEST_REPORT
             fi
             
             # Create comprehensive deployment notification
-            cat > deployment-notification.txt << 'NOTIFICATION'
-🚀 Infrastructure Deployment Completed Successfully!
-==================================================
-
-Deployment Information:
-======================
-Timestamp: $(date)
-Branch: ${CODECATALYST_SOURCE_BRANCH_NAME:-main}
-Commit: ${CODECATALYST_SOURCE_BRANCH_REF:-unknown}
-Deployment Type: $DEPLOYMENT_TYPE
-Handler Used: $HANDLER_USED
-
-Deployed Resources:
-==================
-🌐 API Gateway: $API_URL
-🎨 Frontend (CloudFront): $FRONTEND_URL
-📦 S3 Bucket: $S3_BUCKET
-
-Integration Status:
-==================
-$([ "$DEPLOYMENT_TYPE" = "api_sync" ] && echo "✅ Registry-API code successfully integrated" || echo "ℹ️ Using existing infrastructure handlers")
-$([ -f "post-deployment-test-report.txt" ] && echo "✅ Post-deployment tests completed" || echo "⚠️ Post-deployment tests not available")
-
-Next Steps:
-==========
-1. Verify API endpoints are working correctly
-2. Update frontend configuration if needed
-3. Monitor application performance and logs
-4. Coordinate with registry-api team for any issues
-
-$([ "$DEPLOYMENT_TYPE" = "api_sync" ] && echo "🔄 This deployment included synchronized code from registry-api repository" || echo "")
-
-Deployment completed successfully! 🎉
-NOTIFICATION
+            # Create comprehensive deployment notification
+            echo "🚀 Infrastructure Deployment Completed Successfully!" > deployment-notification.txt
+            echo "==================================================" >> deployment-notification.txt
+            echo "" >> deployment-notification.txt
+            echo "Deployment Information:" >> deployment-notification.txt
+            echo "======================" >> deployment-notification.txt
+            echo "Timestamp: $(date)" >> deployment-notification.txt
+            echo "Branch: ${CODECATALYST_SOURCE_BRANCH_NAME:-main}" >> deployment-notification.txt
+            echo "Commit: ${CODECATALYST_SOURCE_BRANCH_REF:-unknown}" >> deployment-notification.txt
+            echo "Deployment Type: $DEPLOYMENT_TYPE" >> deployment-notification.txt
+            echo "Handler Used: $HANDLER_USED" >> deployment-notification.txt
+            echo "" >> deployment-notification.txt
+            echo "Deployed Resources:" >> deployment-notification.txt
+            echo "==================" >> deployment-notification.txt
+            echo "🌐 API Gateway: $API_URL" >> deployment-notification.txt
+            echo "🎨 Frontend (CloudFront): $FRONTEND_URL" >> deployment-notification.txt
+            echo "📦 S3 Bucket: $S3_BUCKET" >> deployment-notification.txt
+            echo "" >> deployment-notification.txt
+            echo "Integration Status:" >> deployment-notification.txt
+            echo "==================" >> deployment-notification.txt
+            if [ "$DEPLOYMENT_TYPE" = "api_sync" ]; then
+                echo "✅ Registry-API code successfully integrated" >> deployment-notification.txt
+            else
+                echo "ℹ️ Using existing infrastructure handlers" >> deployment-notification.txt
+            fi
+            if [ -f "post-deployment-test-report.txt" ]; then
+                echo "✅ Post-deployment tests completed" >> deployment-notification.txt
+            else
+                echo "⚠️ Post-deployment tests not available" >> deployment-notification.txt
+            fi
+            echo "" >> deployment-notification.txt
+            echo "Next Steps:" >> deployment-notification.txt
+            echo "==========" >> deployment-notification.txt
+            echo "1. Verify API endpoints are working correctly" >> deployment-notification.txt
+            echo "2. Update frontend configuration if needed" >> deployment-notification.txt
+            echo "3. Monitor application performance and logs" >> deployment-notification.txt
+            echo "4. Coordinate with registry-api team for any issues" >> deployment-notification.txt
+            echo "" >> deployment-notification.txt
+            if [ "$DEPLOYMENT_TYPE" = "api_sync" ]; then
+                echo "🔄 This deployment included synchronized code from registry-api repository" >> deployment-notification.txt
+                echo "" >> deployment-notification.txt
+            fi
+            echo "Deployment completed successfully! 🎉" >> deployment-notification.txt
             
             cat deployment-notification.txt
             

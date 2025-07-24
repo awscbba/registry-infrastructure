@@ -81,20 +81,22 @@ Actions:
             fi
             
             # Create coordination plan
-            cat > coordination-plan.json << 'COORDINATION_PLAN'
-{
-  "deployment_strategy": "$DEPLOYMENT_STRATEGY",
-  "api_trigger_found": $API_TRIGGER_FOUND,
-  "infrastructure_changes": $INFRA_CHANGES,
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "coordination_actions": {
-    "sync_api_code": $([ "$API_TRIGGER_FOUND" = true ] && echo "true" || echo "false"),
-    "deploy_infrastructure": true,
-    "run_integration_tests": true,
-    "notify_teams": true
-  }
-}
-COORDINATION_PLAN
+            # Create coordination plan
+            SYNC_API_CODE=$([ "$API_TRIGGER_FOUND" = true ] && echo "true" || echo "false")
+            TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            
+            echo "{" > coordination-plan.json
+            echo "  \"deployment_strategy\": \"$DEPLOYMENT_STRATEGY\"," >> coordination-plan.json
+            echo "  \"api_trigger_found\": $API_TRIGGER_FOUND," >> coordination-plan.json
+            echo "  \"infrastructure_changes\": $INFRA_CHANGES," >> coordination-plan.json
+            echo "  \"timestamp\": \"$TIMESTAMP\"," >> coordination-plan.json
+            echo "  \"coordination_actions\": {" >> coordination-plan.json
+            echo "    \"sync_api_code\": $SYNC_API_CODE," >> coordination-plan.json
+            echo "    \"deploy_infrastructure\": true," >> coordination-plan.json
+            echo "    \"run_integration_tests\": true," >> coordination-plan.json
+            echo "    \"notify_teams\": true" >> coordination-plan.json
+            echo "  }" >> coordination-plan.json
+            echo "}" >> coordination-plan.json
             
             cat coordination-plan.json
             echo "✅ Deployment coordination plan created"
@@ -173,33 +175,35 @@ COORDINATION_PLAN
                 cp ../registry-api/main.py lambda/
                 
                 # Create sync metadata
-                cat > lambda/sync-metadata.json << 'SYNC_METADATA'
-{
-  "sync_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "source_repository": "registry-api",
-  "source_branch": "$(cd ../registry-api && git branch --show-current)",
-  "source_commit": "$(cd ../registry-api && git rev-parse HEAD)",
-  "deployment_strategy": "$DEPLOYMENT_STRATEGY",
-  "coordinated_deployment": true
-}
-SYNC_METADATA
+                # Create sync metadata
+                SYNC_TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+                SOURCE_BRANCH=$(cd ../registry-api && git branch --show-current)
+                SOURCE_COMMIT=$(cd ../registry-api && git rev-parse HEAD)
+                
+                echo "{" > lambda/sync-metadata.json
+                echo "  \"sync_timestamp\": \"$SYNC_TIMESTAMP\"," >> lambda/sync-metadata.json
+                echo "  \"source_repository\": \"registry-api\"," >> lambda/sync-metadata.json
+                echo "  \"source_branch\": \"$SOURCE_BRANCH\"," >> lambda/sync-metadata.json
+                echo "  \"source_commit\": \"$SOURCE_COMMIT\"," >> lambda/sync-metadata.json
+                echo "  \"deployment_strategy\": \"$DEPLOYMENT_STRATEGY\"," >> lambda/sync-metadata.json
+                echo "  \"coordinated_deployment\": true" >> lambda/sync-metadata.json
+                echo "}" >> lambda/sync-metadata.json
                 
                 # Update requirements
                 if [ -f "../registry-api/requirements.txt" ]; then
                     echo "📦 Updating requirements..."
-                    cat > lambda/requirements.txt << 'COORD_REQUIREMENTS'
-# Coordinated deployment requirements
-boto3==1.34.144
-botocore==1.34.144
-pydantic==2.10.3
-fastapi==0.111.0
-mangum==0.17.0
-python-multipart>=0.0.7
-bcrypt==4.1.3
-pyjwt==2.8.0
-python-json-logger==2.0.7
-aws-lambda-powertools>=2.0.0
-COORD_REQUIREMENTS
+                    # Create coordinated deployment requirements
+                    echo "# Coordinated deployment requirements" > lambda/requirements.txt
+                    echo "boto3==1.34.144" >> lambda/requirements.txt
+                    echo "botocore==1.34.144" >> lambda/requirements.txt
+                    echo "pydantic==2.10.3" >> lambda/requirements.txt
+                    echo "fastapi==0.111.0" >> lambda/requirements.txt
+                    echo "mangum==0.17.0" >> lambda/requirements.txt
+                    echo "python-multipart>=0.0.7" >> lambda/requirements.txt
+                    echo "bcrypt==4.1.3" >> lambda/requirements.txt
+                    echo "pyjwt==2.8.0" >> lambda/requirements.txt
+                    echo "python-json-logger==2.0.7" >> lambda/requirements.txt
+                    echo "aws-lambda-powertools>=2.0.0" >> lambda/requirements.txt
                 fi
                 
                 echo "✅ API code synchronized successfully"
@@ -208,20 +212,23 @@ COORD_REQUIREMENTS
             fi
             
             # Create synchronization summary
-            cat > sync-summary.txt << 'SYNC_SUMMARY'
-Repository Synchronization Summary
-=================================
-Timestamp: $(date)
-Deployment Strategy: $DEPLOYMENT_STRATEGY
-API Code Synchronized: $SYNC_API_CODE
-
-Actions Performed:
-$([ "$SYNC_API_CODE" = "true" ] && echo "✅ Synchronized API code from registry-api" || echo "ℹ️ No API synchronization needed")
-$([ "$SYNC_API_CODE" = "true" ] && echo "✅ Updated lambda requirements.txt" || echo "")
-$([ "$SYNC_API_CODE" = "true" ] && echo "✅ Created sync metadata" || echo "")
-
-Ready for Infrastructure Deployment: Yes
-SYNC_SUMMARY
+            # Create synchronization summary
+            echo "Repository Synchronization Summary" > sync-summary.txt
+            echo "=================================" >> sync-summary.txt
+            echo "Timestamp: $(date)" >> sync-summary.txt
+            echo "Deployment Strategy: $DEPLOYMENT_STRATEGY" >> sync-summary.txt
+            echo "API Code Synchronized: $SYNC_API_CODE" >> sync-summary.txt
+            echo "" >> sync-summary.txt
+            echo "Actions Performed:" >> sync-summary.txt
+            if [ "$SYNC_API_CODE" = "true" ]; then
+                echo "✅ Synchronized API code from registry-api" >> sync-summary.txt
+                echo "✅ Updated lambda requirements.txt" >> sync-summary.txt
+                echo "✅ Created sync metadata" >> sync-summary.txt
+            else
+                echo "ℹ️ No API synchronization needed" >> sync-summary.txt
+            fi
+            echo "" >> sync-summary.txt
+            echo "Ready for Infrastructure Deployment: Yes" >> sync-summary.txt
             
             cat sync-summary.txt
             echo "✅ Repository synchronization completed"
