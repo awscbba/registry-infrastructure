@@ -21,7 +21,7 @@ Actions:
       Sources:
         - WorkflowSource
     Configuration:
-      Commands:
+      Steps:
         - Run: |
             echo "🔍 Checking API Code Synchronization"
             echo "==================================="
@@ -90,7 +90,7 @@ Actions:
       Artifacts:
         - deploymentContext
     Configuration:
-      Commands:
+      Steps:
         - Run: |
             echo "🔧 Preparing API Integration"
             echo "==========================="
@@ -233,7 +233,7 @@ Actions:
         - deploymentContext
         - apiIntegration
     Configuration:
-      Commands:
+      Steps:
         - Run: |
             echo "🔍 Infrastructure Validation"
             echo "=========================="
@@ -327,7 +327,7 @@ Actions:
         - deploymentContext
         - apiIntegration
     Configuration:
-      Commands:
+      Steps:
         - Run: |
             echo "🚀 Infrastructure Deployment"
             echo "=========================="
@@ -422,7 +422,7 @@ Actions:
       Artifacts:
         - deploymentSummary
     Configuration:
-      Commands:
+      Steps:
         - Run: |
             echo "🧪 Post-Deployment Testing"
             echo "========================="
@@ -609,7 +609,7 @@ Actions:
         - deploymentSummary
         - testReport
     Configuration:
-      Commands:
+      Steps:
         - Run: |
             echo "📢 Deployment Status Notification"
             echo "================================"

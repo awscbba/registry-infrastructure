@@ -18,7 +18,7 @@ Actions:
       Sources:
         - WorkflowSource
     Configuration:
-      Commands:
+      Steps:
         - Run: |
             echo "🔍 Checking Deployment Triggers"
             echo "==============================="
@@ -127,7 +127,7 @@ Actions:
       Artifacts:
         - coordinationPlan
     Configuration:
-      Commands:
+      Steps:
         - Run: |
             echo "🔄 Repository Synchronization"
             echo "============================"
@@ -259,7 +259,7 @@ Actions:
         - coordinationPlan
         - syncSummary
     Configuration:
-      Commands:
+      Steps:
         - Run: |
             echo "🚀 Coordinated Infrastructure Deployment"
             echo "========================================"
@@ -395,7 +395,7 @@ Actions:
       Artifacts:
         - coordinatedDeploymentResult
     Configuration:
-      Commands:
+      Steps:
         - Run: |
             echo "🧪 Cross-Repository Integration Tests"
             echo "===================================="
