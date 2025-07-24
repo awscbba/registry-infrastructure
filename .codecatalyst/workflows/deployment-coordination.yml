@@ -286,80 +286,44 @@ Actions:
                     sed -i 's/handler="enhanced_api_handler.lambda_handler"/handler="integrated_api_handler.lambda_handler"/g' people_register_infrastructure/people_register_infrastructure_stack.py
                     
                     # Create integrated handler
-                    cat > lambda/integrated_api_handler.py << 'COORD_HANDLER'
-"""
-Integrated API Handler - Coordinated Deployment
-Bridges registry-api FastAPI application with AWS Lambda infrastructure
-"""
-import json
-import logging
-import os
-import sys
-
-# Add the src directory to Python path for registry-api imports
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
-
-def lambda_handler(event, context):
-    """
-    AWS Lambda handler that integrates registry-api FastAPI application
-    """
-    try:
-        logger.info(f"Coordinated deployment handler - Event: {json.dumps(event, default=str)}")
-        
-        # Try to import and use registry-api FastAPI app
-        try:
-            from main import app
-            from mangum import Mangum
-            
-            # Create Mangum handler for FastAPI
-            handler = Mangum(app, lifespan="off")
-            
-            # Process the request
-            response = handler(event, context)
-            
-            logger.info(f"Registry-API response status: {response.get('statusCode', 'unknown')}")
-            return response
-            
-        except ImportError as e:
-            logger.warning(f"Registry-API import failed, using fallback: {str(e)}")
-            
-            # Fallback to existing enhanced_api_handler
-            try:
-                from enhanced_api_handler import lambda_handler as fallback_handler
-                logger.info("Using enhanced_api_handler fallback")
-                return fallback_handler(event, context)
-            except ImportError:
-                logger.error("No fallback handler available")
-                return {
-                    "statusCode": 500,
-                    "headers": {
-                        "Content-Type": "application/json",
-                        "Access-Control-Allow-Origin": "*"
-                    },
-                    "body": json.dumps({
-                        "error": "API handler not available",
-                        "message": "Coordinated deployment handler failed"
-                    })
-                }
-        
-    except Exception as e:
-        logger.error(f"Coordinated deployment handler error: {str(e)}", exc_info=True)
-        return {
-            "statusCode": 500,
-            "headers": {
-                "Content-Type": "application/json",
-                "Access-Control-Allow-Origin": "*"
-            },
-            "body": json.dumps({
-                "error": "Internal Server Error",
-                "message": "Coordinated deployment failed"
-            })
-        }
-COORD_HANDLER
+                    echo "Creating coordinated deployment handler..."
+                    mkdir -p lambda
+                    
+                    # Create a basic coordinated handler file
+                    echo "# Integrated API Handler - Coordinated Deployment" > lambda/integrated_api_handler.py
+                    echo "import json" >> lambda/integrated_api_handler.py
+                    echo "import logging" >> lambda/integrated_api_handler.py
+                    echo "import os" >> lambda/integrated_api_handler.py
+                    echo "import sys" >> lambda/integrated_api_handler.py
+                    echo "" >> lambda/integrated_api_handler.py
+                    echo "# Add the src directory to Python path for registry-api imports" >> lambda/integrated_api_handler.py
+                    echo "sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))" >> lambda/integrated_api_handler.py
+                    echo "" >> lambda/integrated_api_handler.py
+                    echo "# Configure logging" >> lambda/integrated_api_handler.py
+                    echo "logging.basicConfig(level=logging.INFO)" >> lambda/integrated_api_handler.py
+                    echo "logger = logging.getLogger(__name__)" >> lambda/integrated_api_handler.py
+                    echo "" >> lambda/integrated_api_handler.py
+                    echo "def lambda_handler(event, context):" >> lambda/integrated_api_handler.py
+                    echo "    try:" >> lambda/integrated_api_handler.py
+                    echo "        logger.info(f'Coordinated deployment handler - Event: {json.dumps(event, default=str)}')" >> lambda/integrated_api_handler.py
+                    echo "        try:" >> lambda/integrated_api_handler.py
+                    echo "            from main import app" >> lambda/integrated_api_handler.py
+                    echo "            from mangum import Mangum" >> lambda/integrated_api_handler.py
+                    echo "            handler = Mangum(app, lifespan='off')" >> lambda/integrated_api_handler.py
+                    echo "            response = handler(event, context)" >> lambda/integrated_api_handler.py
+                    echo "            logger.info(f'Registry-API response status: {response.get(\"statusCode\", \"unknown\")}')" >> lambda/integrated_api_handler.py
+                    echo "            return response" >> lambda/integrated_api_handler.py
+                    echo "        except ImportError as e:" >> lambda/integrated_api_handler.py
+                    echo "            logger.warning(f'Registry-API import failed, using fallback: {str(e)}')" >> lambda/integrated_api_handler.py
+                    echo "            try:" >> lambda/integrated_api_handler.py
+                    echo "                from enhanced_api_handler import lambda_handler as fallback_handler" >> lambda/integrated_api_handler.py
+                    echo "                logger.info('Using enhanced_api_handler fallback')" >> lambda/integrated_api_handler.py
+                    echo "                return fallback_handler(event, context)" >> lambda/integrated_api_handler.py
+                    echo "            except ImportError:" >> lambda/integrated_api_handler.py
+                    echo "                return {'statusCode': 500, 'body': json.dumps({'error': 'API handler not available'})}" >> lambda/integrated_api_handler.py
+                    echo "    except Exception as e:" >> lambda/integrated_api_handler.py
+                    echo "        logger.error(f'Coordinated deployment handler error: {str(e)}', exc_info=True)" >> lambda/integrated_api_handler.py
+                    echo "        return {'statusCode': 500, 'body': json.dumps({'error': 'Internal Server Error'})}" >> lambda/integrated_api_handler.py
                 fi
             fi
             
@@ -379,19 +343,21 @@ COORD_HANDLER
                     echo "Deployment Strategy: $DEPLOYMENT_STRATEGY"
                     
                     # Create deployment result
-                    cat > coordinated-deployment-result.json << 'COORD_RESULT'
-{
-  "deployment_successful": true,
-  "deployment_strategy": "$DEPLOYMENT_STRATEGY",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "outputs": {
-    "api_url": "$API_URL",
-    "frontend_url": "$FRONTEND_URL"
-  },
-  "coordination_type": "cross_repository",
-  "api_integration": $([ -f "lambda/sync-metadata.json" ] && echo "true" || echo "false")
-}
-COORD_RESULT
+                    # Create deployment result
+                    API_INTEGRATION=$([ -f "lambda/sync-metadata.json" ] && echo "true" || echo "false")
+                    TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+                    
+                    echo "{" > coordinated-deployment-result.json
+                    echo "  \"deployment_successful\": true," >> coordinated-deployment-result.json
+                    echo "  \"deployment_strategy\": \"$DEPLOYMENT_STRATEGY\"," >> coordinated-deployment-result.json
+                    echo "  \"timestamp\": \"$TIMESTAMP\"," >> coordinated-deployment-result.json
+                    echo "  \"outputs\": {" >> coordinated-deployment-result.json
+                    echo "    \"api_url\": \"$API_URL\"," >> coordinated-deployment-result.json
+                    echo "    \"frontend_url\": \"$FRONTEND_URL\"" >> coordinated-deployment-result.json
+                    echo "  }," >> coordinated-deployment-result.json
+                    echo "  \"coordination_type\": \"cross_repository\"," >> coordinated-deployment-result.json
+                    echo "  \"api_integration\": $API_INTEGRATION" >> coordinated-deployment-result.json
+                    echo "}" >> coordinated-deployment-result.json
                     
                     cat coordinated-deployment-result.json
                 else
@@ -546,27 +512,46 @@ COORD_RESULT
             fi
             
             # Generate integration test report
-            cat > integration-test-report.txt << 'INTEGRATION_TEST_REPORT'
-Cross-Repository Integration Test Report
-=======================================
-Timestamp: $(date)
-API URL: $API_URL
-Deployment Strategy: $DEPLOYMENT_STRATEGY
-API Integration: $API_INTEGRATION
-Overall Status: $([ "$INTEGRATION_TESTS_PASSED" = true ] && echo "PASSED" || echo "FAILED")
-
-Test Results:
-- Health endpoint: $([ "$health_response" = "200" ] && echo "PASS" || echo "FAIL")
-- People list endpoint: $([ "$people_response" = "200" ] && echo "PASS" || echo "FAIL")
-- Person CRUD operations: $([ "$create_response" = "201" ] && echo "PASS" || echo "FAIL")
-
-Coordination Verification:
-- Deployment strategy executed: $DEPLOYMENT_STRATEGY
-- API code integration: $API_INTEGRATION
-- Cross-repository coordination: SUCCESS
-
-$([ "$INTEGRATION_TESTS_PASSED" = true ] && echo "✅ All integration tests passed" || echo "❌ Some integration tests failed")
-INTEGRATION_TEST_REPORT
+            # Generate integration test report
+            echo "Cross-Repository Integration Test Report" > integration-test-report.txt
+            echo "=======================================" >> integration-test-report.txt
+            echo "Timestamp: $(date)" >> integration-test-report.txt
+            echo "API URL: $API_URL" >> integration-test-report.txt
+            echo "Deployment Strategy: $DEPLOYMENT_STRATEGY" >> integration-test-report.txt
+            echo "API Integration: $API_INTEGRATION" >> integration-test-report.txt
+            if [ "$INTEGRATION_TESTS_PASSED" = true ]; then
+                echo "Overall Status: PASSED" >> integration-test-report.txt
+            else
+                echo "Overall Status: FAILED" >> integration-test-report.txt
+            fi
+            echo "" >> integration-test-report.txt
+            echo "Test Results:" >> integration-test-report.txt
+            if [ "$health_response" = "200" ]; then
+                echo "- Health endpoint: PASS" >> integration-test-report.txt
+            else
+                echo "- Health endpoint: FAIL" >> integration-test-report.txt
+            fi
+            if [ "$people_response" = "200" ]; then
+                echo "- People list endpoint: PASS" >> integration-test-report.txt
+            else
+                echo "- People list endpoint: FAIL" >> integration-test-report.txt
+            fi
+            if [ "$create_response" = "201" ]; then
+                echo "- Person CRUD operations: PASS" >> integration-test-report.txt
+            else
+                echo "- Person CRUD operations: FAIL" >> integration-test-report.txt
+            fi
+            echo "" >> integration-test-report.txt
+            echo "Coordination Verification:" >> integration-test-report.txt
+            echo "- Deployment strategy executed: $DEPLOYMENT_STRATEGY" >> integration-test-report.txt
+            echo "- API code integration: $API_INTEGRATION" >> integration-test-report.txt
+            echo "- Cross-repository coordination: SUCCESS" >> integration-test-report.txt
+            echo "" >> integration-test-report.txt
+            if [ "$INTEGRATION_TESTS_PASSED" = true ]; then
+                echo "✅ All integration tests passed" >> integration-test-report.txt
+            else
+                echo "❌ Some integration tests failed" >> integration-test-report.txt
+            fi
             
             cat integration-test-report.txt
             
