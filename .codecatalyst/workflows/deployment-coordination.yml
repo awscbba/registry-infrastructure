@@ -18,7 +18,7 @@ Actions:
       Sources:
         - WorkflowSource
     Configuration:
-      Steps:
+      Commands:
         - Run: |
             echo "🔍 Checking Deployment Triggers"
             echo "==============================="
@@ -81,7 +81,7 @@ Actions:
             fi
             
             # Create coordination plan
-            cat > coordination-plan.json << EOF
+            cat > coordination-plan.json << 'COORDINATION_PLAN'
 {
   "deployment_strategy": "$DEPLOYMENT_STRATEGY",
   "api_trigger_found": $API_TRIGGER_FOUND,
@@ -94,7 +94,7 @@ Actions:
     "notify_teams": true
   }
 }
-EOF
+COORDINATION_PLAN
             
             cat coordination-plan.json
             echo "✅ Deployment coordination plan created"
@@ -125,7 +125,7 @@ EOF
       Artifacts:
         - coordinationPlan
     Configuration:
-      Steps:
+      Commands:
         - Run: |
             echo "🔄 Repository Synchronization"
             echo "============================"
@@ -173,7 +173,7 @@ EOF
                 cp ../registry-api/main.py lambda/
                 
                 # Create sync metadata
-                cat > lambda/sync-metadata.json << EOF
+                cat > lambda/sync-metadata.json << 'SYNC_METADATA'
 {
   "sync_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
   "source_repository": "registry-api",
@@ -182,12 +182,12 @@ EOF
   "deployment_strategy": "$DEPLOYMENT_STRATEGY",
   "coordinated_deployment": true
 }
-EOF
+SYNC_METADATA
                 
                 # Update requirements
                 if [ -f "../registry-api/requirements.txt" ]; then
                     echo "📦 Updating requirements..."
-                    cat > lambda/requirements.txt << 'EOF'
+                    cat > lambda/requirements.txt << 'COORD_REQUIREMENTS'
 # Coordinated deployment requirements
 boto3==1.34.144
 botocore==1.34.144
@@ -199,7 +199,7 @@ bcrypt==4.1.3
 pyjwt==2.8.0
 python-json-logger==2.0.7
 aws-lambda-powertools>=2.0.0
-EOF
+COORD_REQUIREMENTS
                 fi
                 
                 echo "✅ API code synchronized successfully"
@@ -208,7 +208,7 @@ EOF
             fi
             
             # Create synchronization summary
-            cat > sync-summary.txt << EOF
+            cat > sync-summary.txt << 'SYNC_SUMMARY'
 Repository Synchronization Summary
 =================================
 Timestamp: $(date)
@@ -221,7 +221,7 @@ $([ "$SYNC_API_CODE" = "true" ] && echo "✅ Updated lambda requirements.txt" ||
 $([ "$SYNC_API_CODE" = "true" ] && echo "✅ Created sync metadata" || echo "")
 
 Ready for Infrastructure Deployment: Yes
-EOF
+SYNC_SUMMARY
             
             cat sync-summary.txt
             echo "✅ Repository synchronization completed"
@@ -252,7 +252,7 @@ EOF
         - coordinationPlan
         - syncSummary
     Configuration:
-      Steps:
+      Commands:
         - Run: |
             echo "🚀 Coordinated Infrastructure Deployment"
             echo "========================================"
@@ -279,7 +279,7 @@ EOF
                     sed -i 's/handler="enhanced_api_handler.lambda_handler"/handler="integrated_api_handler.lambda_handler"/g' people_register_infrastructure/people_register_infrastructure_stack.py
                     
                     # Create integrated handler
-                    cat > lambda/integrated_api_handler.py << 'EOF'
+                    cat > lambda/integrated_api_handler.py << 'COORD_HANDLER'
 """
 Integrated API Handler - Coordinated Deployment
 Bridges registry-api FastAPI application with AWS Lambda infrastructure
@@ -352,7 +352,7 @@ def lambda_handler(event, context):
                 "message": "Coordinated deployment failed"
             })
         }
-EOF
+COORD_HANDLER
                 fi
             fi
             
@@ -372,7 +372,7 @@ EOF
                     echo "Deployment Strategy: $DEPLOYMENT_STRATEGY"
                     
                     # Create deployment result
-                    cat > coordinated-deployment-result.json << EOF
+                    cat > coordinated-deployment-result.json << 'COORD_RESULT'
 {
   "deployment_successful": true,
   "deployment_strategy": "$DEPLOYMENT_STRATEGY",
@@ -384,7 +384,7 @@ EOF
   "coordination_type": "cross_repository",
   "api_integration": $([ -f "lambda/sync-metadata.json" ] && echo "true" || echo "false")
 }
-EOF
+COORD_RESULT
                     
                     cat coordinated-deployment-result.json
                 else
@@ -422,7 +422,7 @@ EOF
       Artifacts:
         - coordinatedDeploymentResult
     Configuration:
-      Steps:
+      Commands:
         - Run: |
             echo "🧪 Cross-Repository Integration Tests"
             echo "===================================="
@@ -539,7 +539,7 @@ EOF
             fi
             
             # Generate integration test report
-            cat > integration-test-report.txt << EOF
+            cat > integration-test-report.txt << 'INTEGRATION_TEST_REPORT'
 Cross-Repository Integration Test Report
 =======================================
 Timestamp: $(date)
@@ -559,7 +559,7 @@ Coordination Verification:
 - Cross-repository coordination: SUCCESS
 
 $([ "$INTEGRATION_TESTS_PASSED" = true ] && echo "✅ All integration tests passed" || echo "❌ Some integration tests failed")
-EOF
+INTEGRATION_TEST_REPORT
             
             cat integration-test-report.txt
             

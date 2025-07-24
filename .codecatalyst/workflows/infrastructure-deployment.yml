@@ -21,7 +21,7 @@ Actions:
       Sources:
         - WorkflowSource
     Configuration:
-      Steps:
+      Commands:
         - Run: |
             echo "🔍 Checking API Code Synchronization"
             echo "==================================="
@@ -48,15 +48,19 @@ Actions:
             fi
             
             # Create deployment context
-            cat > deployment-context.json << EOF
-{
-  "deployment_type": "$([ -f "lambda/main.py" ] && echo "api_sync" || echo "infrastructure_only")",
-  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
-  "branch": "${CODECATALYST_SOURCE_BRANCH_NAME:-main}",
-  "commit": "${CODECATALYST_SOURCE_BRANCH_REF:-unknown}",
-  "api_sync_detected": $([ -f "lambda/main.py" ] && echo "true" || echo "false")
-}
-EOF
+            DEPLOYMENT_TYPE=$([ -f "lambda/main.py" ] && echo "api_sync" || echo "infrastructure_only")
+            API_SYNC_DETECTED=$([ -f "lambda/main.py" ] && echo "true" || echo "false")
+            TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            BRANCH=${CODECATALYST_SOURCE_BRANCH_NAME:-main}
+            COMMIT=${CODECATALYST_SOURCE_BRANCH_REF:-unknown}
+            
+            echo "{" > deployment-context.json
+            echo "  \"deployment_type\": \"$DEPLOYMENT_TYPE\"," >> deployment-context.json
+            echo "  \"timestamp\": \"$TIMESTAMP\"," >> deployment-context.json
+            echo "  \"branch\": \"$BRANCH\"," >> deployment-context.json
+            echo "  \"commit\": \"$COMMIT\"," >> deployment-context.json
+            echo "  \"api_sync_detected\": $API_SYNC_DETECTED" >> deployment-context.json
+            echo "}" >> deployment-context.json
             
             cat deployment-context.json
             echo "✅ API sync check completed"
@@ -86,7 +90,7 @@ EOF
       Artifacts:
         - deploymentContext
     Configuration:
-      Steps:
+      Commands:
         - Run: |
             echo "🔧 Preparing API Integration"
             echo "==========================="
@@ -102,7 +106,7 @@ EOF
                 echo "🔄 Integrating synchronized API code with infrastructure"
                 
                 # Create integrated Lambda handler that uses the new API structure
-                cat > lambda/integrated_api_handler.py << 'EOF'
+                cat > lambda/integrated_api_handler.py << 'INTEGRATED_HANDLER'
 """
 Integrated API Handler - Bridges registry-api code with Lambda infrastructure
 This handler integrates the FastAPI application from registry-api with AWS Lambda
@@ -178,14 +182,14 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
                 "message": "An unexpected error occurred"
             })
         }
-EOF
+INTEGRATED_HANDLER
                 
                 # Update requirements.txt to include registry-api dependencies
                 if [ -f "lambda/requirements.txt" ]; then
                     echo "📦 Merging requirements from registry-api"
                     
                     # Create merged requirements
-                    cat > lambda/requirements_merged.txt << 'EOF'
+                    cat > lambda/requirements_merged.txt << 'REQUIREMENTS'
 # Infrastructure requirements (existing)
 boto3==1.34.144
 botocore==1.34.144
@@ -201,7 +205,7 @@ python-multipart>=0.0.7
 pytest==8.2.2
 pytest-mock==3.14.0
 moto==5.0.9
-EOF
+REQUIREMENTS
                     
                     # Replace original requirements
                     mv lambda/requirements_merged.txt lambda/requirements.txt
@@ -217,7 +221,7 @@ EOF
             fi
             
             # Create integration summary
-            cat > api-integration-summary.txt << EOF
+            cat > api-integration-summary.txt << 'INTEGRATION_SUMMARY'
 API Integration Summary
 ======================
 Timestamp: $(date)
@@ -232,7 +236,7 @@ Handler Priority:
 1. integrated_api_handler.py (if API sync detected)
 2. enhanced_api_handler.py (fallback)
 3. api_handler.py (legacy fallback)
-EOF
+INTEGRATION_SUMMARY
             
             cat api-integration-summary.txt
             echo "✅ API integration preparation completed"
@@ -264,7 +268,7 @@ EOF
         - deploymentContext
         - apiIntegration
     Configuration:
-      Steps:
+      Commands:
         - Run: |
             echo "🔍 Infrastructure Validation"
             echo "=========================="
@@ -358,7 +362,7 @@ EOF
         - deploymentContext
         - apiIntegration
     Configuration:
-      Steps:
+      Commands:
         - Run: |
             echo "🚀 Infrastructure Deployment"
             echo "=========================="
@@ -400,7 +404,7 @@ EOF
                     echo "S3 Bucket: $S3_BUCKET"
                     
                     # Create deployment summary
-                    cat > deployment-summary.json << EOF
+                    cat > deployment-summary.json << 'DEPLOYMENT_SUMMARY'
 {
   "deployment_successful": true,
   "deployment_type": "$DEPLOYMENT_TYPE",
@@ -413,7 +417,7 @@ EOF
   },
   "handler_used": "$([ "$API_SYNC_DETECTED" = "true" ] && echo "integrated_api_handler" || echo "enhanced_api_handler")"
 }
-EOF
+DEPLOYMENT_SUMMARY
                     
                     cat deployment-summary.json
                     echo "✅ Infrastructure deployment completed successfully"
@@ -452,7 +456,7 @@ EOF
       Artifacts:
         - deploymentSummary
     Configuration:
-      Steps:
+      Commands:
         - Run: |
             echo "🧪 Post-Deployment Testing"
             echo "========================="
@@ -567,7 +571,7 @@ EOF
             test_endpoint "/people/search" "200" "People search endpoint" || echo "⚠️ Search endpoint not available (non-critical)"
             
             # Generate test report
-            cat > post-deployment-test-report.txt << EOF
+            cat > post-deployment-test-report.txt << 'TEST_REPORT'
 Post-Deployment Test Report
 ==========================
 Timestamp: $(date)
@@ -582,7 +586,7 @@ Test Results:
 - Person CRUD: $([ "$create_response" = "201" ] && echo "PASS" || echo "FAIL")
 
 $([ "$TESTS_PASSED" = true ] && echo "✅ All critical tests passed" || echo "❌ Some tests failed")
-EOF
+TEST_REPORT
             
             cat post-deployment-test-report.txt
             
@@ -620,7 +624,7 @@ EOF
         - deploymentSummary
         - testReport
     Configuration:
-      Steps:
+      Commands:
         - Run: |
             echo "📢 Deployment Status Notification"
             echo "================================"
@@ -642,7 +646,7 @@ EOF
             fi
             
             # Create comprehensive deployment notification
-            cat > deployment-notification.txt << EOF
+            cat > deployment-notification.txt << 'NOTIFICATION'
 🚀 Infrastructure Deployment Completed Successfully!
 ==================================================
 
@@ -675,7 +679,7 @@ Next Steps:
 $([ "$DEPLOYMENT_TYPE" = "api_sync" ] && echo "🔄 This deployment included synchronized code from registry-api repository" || echo "")
 
 Deployment completed successfully! 🎉
-EOF
+NOTIFICATION
             
             cat deployment-notification.txt
             
