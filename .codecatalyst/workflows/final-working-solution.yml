@@ -1,10 +1,8 @@
-Name: Final_Working_Solution
+Name: Legacy_Final_Working_Solution
 SchemaVersion: "1.0"
 
 Triggers:
-  - Type: PUSH
-    Branches:
-      - main
+  - Type: MANUAL
 
 Actions:
   DeployAndTest:

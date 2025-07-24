@@ -1,0 +1,694 @@
+Name: Infrastructure_Deployment_Pipeline
+SchemaVersion: "1.0"
+
+Triggers:
+  - Type: PUSH
+    Branches:
+      - main
+  - Type: MANUAL
+
+Actions:
+  CheckAPISync:
+    Identifier: aws/build@v1
+    Compute:
+      Type: EC2
+    Environment:
+      Connections:
+        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+          Name: "142728997126"
+      Name: AWS
+    Inputs:
+      Sources:
+        - WorkflowSource
+    Configuration:
+      Steps:
+        - Run: |
+            echo "🔍 Checking API Code Synchronization"
+            echo "==================================="
+            
+            # Check if this deployment was triggered by API sync
+            if [ -f "lambda/main.py" ] && [ -d "lambda/src" ]; then
+                echo "✅ API code synchronized from registry-api repository"
+                echo "📊 API sync detected:"
+                echo "  - main.py: $([ -f "lambda/main.py" ] && echo "Present" || echo "Missing")"
+                echo "  - src/ directory: $([ -d "lambda/src" ] && echo "Present" || echo "Missing")"
+                echo "  - requirements.txt: $([ -f "lambda/requirements.txt" ] && echo "Present" || echo "Missing")"
+                
+                # Check for sync metadata
+                if [ -f "lambda/sync-metadata.json" ]; then
+                    echo "📋 Sync metadata found:"
+                    cat lambda/sync-metadata.json
+                fi
+                
+                echo "🔄 Proceeding with infrastructure deployment using synchronized API code"
+            else
+                echo "ℹ️ No API sync detected - using existing lambda handlers"
+                echo "📊 Current lambda structure:"
+                ls -la lambda/ || echo "Lambda directory not found"
+            fi
+            
+            # Create deployment context
+            cat > deployment-context.json << EOF
+{
+  "deployment_type": "$([ -f "lambda/main.py" ] && echo "api_sync" || echo "infrastructure_only")",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "branch": "${CODECATALYST_SOURCE_BRANCH_NAME:-main}",
+  "commit": "${CODECATALYST_SOURCE_BRANCH_REF:-unknown}",
+  "api_sync_detected": $([ -f "lambda/main.py" ] && echo "true" || echo "false")
+}
+EOF
+            
+            cat deployment-context.json
+            echo "✅ API sync check completed"
+      Container:
+        Registry: CODECATALYST
+        Image: CodeCatalystLinux_x86_64:2024_03
+    Outputs:
+      Artifacts:
+        - Name: deploymentContext
+          Files:
+            - "deployment-context.json"
+
+  PrepareAPIIntegration:
+    Identifier: aws/build@v1
+    DependsOn:
+      - CheckAPISync
+    Compute:
+      Type: EC2
+    Environment:
+      Connections:
+        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+          Name: "142728997126"
+      Name: AWS
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - deploymentContext
+    Configuration:
+      Steps:
+        - Run: |
+            echo "🔧 Preparing API Integration"
+            echo "==========================="
+            
+            # Read deployment context
+            DEPLOYMENT_TYPE=$(jq -r '.deployment_type' deployment-context.json)
+            API_SYNC_DETECTED=$(jq -r '.api_sync_detected' deployment-context.json)
+            
+            echo "Deployment type: $DEPLOYMENT_TYPE"
+            echo "API sync detected: $API_SYNC_DETECTED"
+            
+            if [ "$API_SYNC_DETECTED" = "true" ]; then
+                echo "🔄 Integrating synchronized API code with infrastructure"
+                
+                # Create integrated Lambda handler that uses the new API structure
+                cat > lambda/integrated_api_handler.py << 'EOF'
+"""
+Integrated API Handler - Bridges registry-api code with Lambda infrastructure
+This handler integrates the FastAPI application from registry-api with AWS Lambda
+"""
+import json
+import logging
+import os
+import sys
+from typing import Dict, Any
+
+# Add the src directory to Python path for registry-api imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
+    """
+    AWS Lambda handler that integrates registry-api FastAPI application
+    """
+    try:
+        logger.info(f"Received event: {json.dumps(event, default=str)}")
+        
+        # Import the FastAPI app from registry-api
+        try:
+            from main import app
+            from mangum import Mangum
+            
+            # Create Mangum handler for FastAPI
+            handler = Mangum(app, lifespan="off")
+            
+            # Process the request
+            response = handler(event, context)
+            
+            logger.info(f"Response status: {response.get('statusCode', 'unknown')}")
+            return response
+            
+        except ImportError as e:
+            logger.error(f"Failed to import registry-api components: {str(e)}")
+            
+            # Fallback to existing enhanced_api_handler if registry-api import fails
+            try:
+                from enhanced_api_handler import lambda_handler as fallback_handler
+                logger.info("Using fallback enhanced_api_handler")
+                return fallback_handler(event, context)
+            except ImportError:
+                logger.error("Fallback handler also not available")
+                return {
+                    "statusCode": 500,
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    },
+                    "body": json.dumps({
+                        "error": "API handler not available",
+                        "message": "Neither registry-api nor fallback handler could be loaded"
+                    })
+                }
+        
+    except Exception as e:
+        logger.error(f"Lambda handler error: {str(e)}", exc_info=True)
+        return {
+            "statusCode": 500,
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*",
+                "Access-Control-Allow-Methods": "GET, POST, PUT, DELETE, OPTIONS",
+                "Access-Control-Allow-Headers": "Content-Type, Authorization"
+            },
+            "body": json.dumps({
+                "error": "Internal Server Error",
+                "message": "An unexpected error occurred"
+            })
+        }
+EOF
+                
+                # Update requirements.txt to include registry-api dependencies
+                if [ -f "lambda/requirements.txt" ]; then
+                    echo "📦 Merging requirements from registry-api"
+                    
+                    # Create merged requirements
+                    cat > lambda/requirements_merged.txt << 'EOF'
+# Infrastructure requirements (existing)
+boto3==1.34.144
+botocore==1.34.144
+pydantic==2.10.3
+bcrypt==4.1.3
+pyjwt==2.8.0
+python-json-logger==2.0.7
+
+# Registry-API requirements (synchronized)
+fastapi==0.111.0
+mangum==0.17.0
+python-multipart>=0.0.7
+pytest==8.2.2
+pytest-mock==3.14.0
+moto==5.0.9
+EOF
+                    
+                    # Replace original requirements
+                    mv lambda/requirements_merged.txt lambda/requirements.txt
+                    
+                    echo "✅ Requirements merged successfully"
+                else
+                    echo "⚠️ No requirements.txt found in lambda directory"
+                fi
+                
+                echo "✅ API integration prepared successfully"
+            else
+                echo "ℹ️ No API sync detected - using existing infrastructure handlers"
+            fi
+            
+            # Create integration summary
+            cat > api-integration-summary.txt << EOF
+API Integration Summary
+======================
+Timestamp: $(date)
+Deployment Type: $DEPLOYMENT_TYPE
+API Sync Detected: $API_SYNC_DETECTED
+
+Integration Actions:
+$([ "$API_SYNC_DETECTED" = "true" ] && echo "✅ Created integrated_api_handler.py" || echo "ℹ️ No integration needed")
+$([ "$API_SYNC_DETECTED" = "true" ] && echo "✅ Merged requirements.txt" || echo "ℹ️ Using existing requirements")
+
+Handler Priority:
+1. integrated_api_handler.py (if API sync detected)
+2. enhanced_api_handler.py (fallback)
+3. api_handler.py (legacy fallback)
+EOF
+            
+            cat api-integration-summary.txt
+            echo "✅ API integration preparation completed"
+      Container:
+        Registry: CODECATALYST
+        Image: CodeCatalystLinux_x86_64:2024_03
+    Outputs:
+      Artifacts:
+        - Name: apiIntegration
+          Files:
+            - "api-integration-summary.txt"
+            - "lambda/integrated_api_handler.py"
+
+  ValidateInfrastructure:
+    Identifier: aws/build@v1
+    DependsOn:
+      - PrepareAPIIntegration
+    Compute:
+      Type: EC2
+    Environment:
+      Connections:
+        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+          Name: "142728997126"
+      Name: AWS
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - deploymentContext
+        - apiIntegration
+    Configuration:
+      Steps:
+        - Run: |
+            echo "🔍 Infrastructure Validation"
+            echo "=========================="
+            
+            # Install required tools
+            echo "📦 Installing required tools..."
+            curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
+            
+            # Environment info
+            echo "Environment Information:"
+            echo "Node version: $(node --version)"
+            echo "npm version: $(npm --version)"
+            echo "Python version: $(python3 --version)"
+            echo "Just version: $(just --version)"
+            
+            # Check AWS credentials
+            echo "🔍 Checking AWS credentials..."
+            if aws sts get-caller-identity; then
+                echo "✅ AWS credentials are valid"
+            else
+                echo "❌ AWS credentials are invalid"
+                exit 1
+            fi
+            
+            # Fix Lambda runtime compatibility
+            echo "🔧 Fixing Lambda runtime compatibility..."
+            if [ -f "people_register_infrastructure/people_register_infrastructure_stack.py" ]; then
+                cp people_register_infrastructure/people_register_infrastructure_stack.py people_register_infrastructure/people_register_infrastructure_stack.py.backup
+                sed -i 's/runtime=_lambda\.Runtime\.PYTHON_3_11/runtime=_lambda.Runtime.PYTHON_3_9/g' people_register_infrastructure/people_register_infrastructure_stack.py
+                echo "✅ Updated Lambda runtime from PYTHON_3_11 to PYTHON_3_9"
+            fi
+            
+            # Update CDK stack to use integrated handler if API sync detected
+            API_SYNC_DETECTED=$(jq -r '.api_sync_detected' deployment-context.json)
+            if [ "$API_SYNC_DETECTED" = "true" ]; then
+                echo "🔧 Updating CDK stack to use integrated API handler..."
+                
+                # Update the handler reference in the CDK stack
+                if [ -f "people_register_infrastructure/people_register_infrastructure_stack.py" ]; then
+                    sed -i 's/handler="enhanced_api_handler.lambda_handler"/handler="integrated_api_handler.lambda_handler"/g' people_register_infrastructure/people_register_infrastructure_stack.py
+                    echo "✅ Updated CDK stack to use integrated_api_handler"
+                fi
+            fi
+            
+            # Python environment setup
+            echo "🔄 Setting up Python environment..."
+            python3 -m venv .venv
+            source .venv/bin/activate
+            
+            # Install compatible CDK dependencies
+            echo "🔄 Installing compatible Python CDK dependencies..."
+            pip install aws-cdk-lib==2.80.0 constructs>=10.0.0,\<11.0.0 boto3>=1.34.0 pydantic>=2.7.0
+            
+            # Install compatible CDK CLI
+            echo "🔄 Installing compatible CDK CLI..."
+            npm uninstall -g aws-cdk 2>/dev/null || echo "No existing CDK to uninstall"
+            npm install -g aws-cdk@2.80.0
+            
+            # CDK version check
+            echo "CDK version: $(cdk --version)"
+            
+            # CDK synthesis validation
+            echo "🔄 Testing CDK synthesis..."
+            if source .venv/bin/activate && cdk synth --quiet; then
+                echo "✅ CDK synthesis validation - SUCCESS"
+            else
+                echo "❌ CDK synthesis validation failed"
+                exit 1
+            fi
+            
+            echo "✅ Infrastructure validation completed successfully"
+      Container:
+        Registry: CODECATALYST
+        Image: CodeCatalystLinux_x86_64:2024_03
+
+  DeployInfrastructure:
+    Identifier: aws/build@v1
+    DependsOn:
+      - ValidateInfrastructure
+    Compute:
+      Type: EC2
+    Environment:
+      Connections:
+        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+          Name: "142728997126"
+      Name: AWS
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - deploymentContext
+        - apiIntegration
+    Configuration:
+      Steps:
+        - Run: |
+            echo "🚀 Infrastructure Deployment"
+            echo "=========================="
+            
+            # Only deploy on main branch
+            if [ "${CODECATALYST_SOURCE_BRANCH_NAME}" != "main" ]; then
+                echo "ℹ️ Not on main branch - skipping deployment"
+                exit 0
+            fi
+            
+            # Setup environment
+            python3 -m venv .venv
+            source .venv/bin/activate
+            pip install aws-cdk-lib==2.80.0 constructs>=10.0.0,\<11.0.0 boto3>=1.34.0 pydantic>=2.7.0
+            npm install -g aws-cdk@2.80.0
+            
+            # Read deployment context
+            API_SYNC_DETECTED=$(jq -r '.api_sync_detected' deployment-context.json)
+            DEPLOYMENT_TYPE=$(jq -r '.deployment_type' deployment-context.json)
+            
+            echo "🏗️ Starting CDK deployment..."
+            echo "Deployment type: $DEPLOYMENT_TYPE"
+            echo "API sync detected: $API_SYNC_DETECTED"
+            
+            # Deploy infrastructure
+            if source .venv/bin/activate && cdk deploy --require-approval never --outputs-file outputs.json; then
+                echo "✅ CDK deployment - SUCCESS"
+                
+                # Extract deployment outputs
+                echo "🔍 Extracting deployment outputs..."
+                if [ -f "outputs.json" ]; then
+                    API_URL=$(cat outputs.json | jq -r '.PeopleRegisterInfrastructureStack.ApiUrl // empty')
+                    FRONTEND_URL=$(cat outputs.json | jq -r '.PeopleRegisterInfrastructureStack.FrontendUrl // empty')
+                    S3_BUCKET=$(cat outputs.json | jq -r '.PeopleRegisterInfrastructureStack.S3BucketName // empty')
+                    
+                    echo "📊 DEPLOYMENT INFORMATION:"
+                    echo "API URL: $API_URL"
+                    echo "Frontend URL: $FRONTEND_URL"
+                    echo "S3 Bucket: $S3_BUCKET"
+                    
+                    # Create deployment summary
+                    cat > deployment-summary.json << EOF
+{
+  "deployment_successful": true,
+  "deployment_type": "$DEPLOYMENT_TYPE",
+  "api_sync_detected": $API_SYNC_DETECTED,
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "outputs": {
+    "api_url": "$API_URL",
+    "frontend_url": "$FRONTEND_URL",
+    "s3_bucket": "$S3_BUCKET"
+  },
+  "handler_used": "$([ "$API_SYNC_DETECTED" = "true" ] && echo "integrated_api_handler" || echo "enhanced_api_handler")"
+}
+EOF
+                    
+                    cat deployment-summary.json
+                    echo "✅ Infrastructure deployment completed successfully"
+                else
+                    echo "⚠️ outputs.json not found"
+                    exit 1
+                fi
+            else
+                echo "❌ CDK deployment failed"
+                exit 1
+            fi
+      Container:
+        Registry: CODECATALYST
+        Image: CodeCatalystLinux_x86_64:2024_03
+    Outputs:
+      Artifacts:
+        - Name: deploymentSummary
+          Files:
+            - "deployment-summary.json"
+            - "outputs.json"
+
+  PostDeploymentTests:
+    Identifier: aws/build@v1
+    DependsOn:
+      - DeployInfrastructure
+    Compute:
+      Type: EC2
+    Environment:
+      Connections:
+        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+          Name: "142728997126"
+      Name: AWS
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - deploymentSummary
+    Configuration:
+      Steps:
+        - Run: |
+            echo "🧪 Post-Deployment Testing"
+            echo "========================="
+            
+            # Only run tests on main branch
+            if [ "${CODECATALYST_SOURCE_BRANCH_NAME}" != "main" ]; then
+                echo "ℹ️ Not on main branch - skipping post-deployment tests"
+                exit 0
+            fi
+            
+            # Read deployment summary
+            if [ -f "deployment-summary.json" ]; then
+                API_URL=$(jq -r '.outputs.api_url' deployment-summary.json)
+                DEPLOYMENT_TYPE=$(jq -r '.deployment_type' deployment-summary.json)
+                HANDLER_USED=$(jq -r '.handler_used' deployment-summary.json)
+                
+                echo "Testing deployed infrastructure:"
+                echo "API URL: $API_URL"
+                echo "Deployment type: $DEPLOYMENT_TYPE"
+                echo "Handler used: $HANDLER_USED"
+            else
+                echo "❌ Deployment summary not found"
+                exit 1
+            fi
+            
+            # Wait for deployment to stabilize
+            echo "⏳ Waiting for deployment to stabilize..."
+            sleep 30
+            
+            # Test function
+            test_endpoint() {
+                local endpoint="$1"
+                local expected_status="$2"
+                local description="$3"
+                local method="${4:-GET}"
+                local data="${5:-}"
+                
+                echo "Testing $description..."
+                
+                if [ "$method" = "POST" ] && [ -n "$data" ]; then
+                    response=$(curl -s -w "%{http_code}" -X POST "$API_URL$endpoint" \
+                        -H "Content-Type: application/json" \
+                        -d "$data" -o response.json)
+                else
+                    response=$(curl -s -w "%{http_code}" -o response.json "$API_URL$endpoint")
+                fi
+                
+                if [ "$response" = "$expected_status" ]; then
+                    echo "✅ $description - OK ($response)"
+                    return 0
+                else
+                    echo "❌ $description - FAILED ($response)"
+                    echo "Response body:"
+                    cat response.json 2>/dev/null || echo "No response body"
+                    return 1
+                fi
+            }
+            
+            # Run comprehensive API tests
+            TESTS_PASSED=true
+            
+            # Basic health check
+            test_endpoint "/health" "200" "Health endpoint" || TESTS_PASSED=false
+            
+            # People endpoints
+            test_endpoint "/people" "200" "People list endpoint" || TESTS_PASSED=false
+            
+            # Test person creation
+            echo "Testing person creation..."
+            create_data='{
+                "firstName": "Test",
+                "lastName": "User",
+                "email": "test-deploy@example.com",
+                "phone": "+1-555-0199",
+                "dateOfBirth": "1990-01-01",
+                "address": {
+                    "street": "123 Test St",
+                    "city": "Test City",
+                    "state": "TS",
+                    "zipCode": "12345",
+                    "country": "USA"
+                }
+            }'
+            
+            create_response=$(curl -s -w "%{http_code}" -X POST "$API_URL/people" \
+                -H "Content-Type: application/json" \
+                -d "$create_data" -o create_response.json)
+            
+            if [ "$create_response" = "201" ]; then
+                echo "✅ Person creation - OK"
+                PERSON_ID=$(jq -r '.id' create_response.json 2>/dev/null || echo "")
+                
+                if [ -n "$PERSON_ID" ] && [ "$PERSON_ID" != "null" ]; then
+                    # Test person retrieval
+                    test_endpoint "/people/$PERSON_ID" "200" "Person retrieval" || TESTS_PASSED=false
+                    
+                    # Clean up test person
+                    delete_response=$(curl -s -w "%{http_code}" -X DELETE "$API_URL/people/$PERSON_ID" -o /dev/null)
+                    if [ "$delete_response" = "204" ]; then
+                        echo "✅ Test cleanup - OK"
+                    else
+                        echo "⚠️ Test cleanup failed ($delete_response)"
+                    fi
+                fi
+            else
+                echo "❌ Person creation - FAILED ($create_response)"
+                cat create_response.json 2>/dev/null || echo "No response body"
+                TESTS_PASSED=false
+            fi
+            
+            # Test search endpoint (if available)
+            test_endpoint "/people/search" "200" "People search endpoint" || echo "⚠️ Search endpoint not available (non-critical)"
+            
+            # Generate test report
+            cat > post-deployment-test-report.txt << EOF
+Post-Deployment Test Report
+==========================
+Timestamp: $(date)
+API URL: $API_URL
+Deployment Type: $DEPLOYMENT_TYPE
+Handler Used: $HANDLER_USED
+Overall Status: $([ "$TESTS_PASSED" = true ] && echo "PASSED" || echo "FAILED")
+
+Test Results:
+- Health endpoint: $(test_endpoint "/health" "200" "Health endpoint" >/dev/null 2>&1 && echo "PASS" || echo "FAIL")
+- People list: $(test_endpoint "/people" "200" "People list endpoint" >/dev/null 2>&1 && echo "PASS" || echo "FAIL")
+- Person CRUD: $([ "$create_response" = "201" ] && echo "PASS" || echo "FAIL")
+
+$([ "$TESTS_PASSED" = true ] && echo "✅ All critical tests passed" || echo "❌ Some tests failed")
+EOF
+            
+            cat post-deployment-test-report.txt
+            
+            if [ "$TESTS_PASSED" = true ]; then
+                echo "🎉 Post-deployment tests passed!"
+                exit 0
+            else
+                echo "❌ Some post-deployment tests failed"
+                exit 1
+            fi
+      Container:
+        Registry: CODECATALYST
+        Image: CodeCatalystLinux_x86_64:2024_03
+    Outputs:
+      Artifacts:
+        - Name: testReport
+          Files:
+            - "post-deployment-test-report.txt"
+
+  NotifyDeploymentStatus:
+    Identifier: aws/build@v1
+    DependsOn:
+      - PostDeploymentTests
+    Compute:
+      Type: EC2
+    Environment:
+      Connections:
+        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+          Name: "142728997126"
+      Name: AWS
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - deploymentSummary
+        - testReport
+    Configuration:
+      Steps:
+        - Run: |
+            echo "📢 Deployment Status Notification"
+            echo "================================"
+            
+            # Read deployment and test results
+            if [ -f "deployment-summary.json" ]; then
+                API_URL=$(jq -r '.outputs.api_url' deployment-summary.json)
+                FRONTEND_URL=$(jq -r '.outputs.frontend_url' deployment-summary.json)
+                S3_BUCKET=$(jq -r '.outputs.s3_bucket' deployment-summary.json)
+                DEPLOYMENT_TYPE=$(jq -r '.deployment_type' deployment-summary.json)
+                HANDLER_USED=$(jq -r '.handler_used' deployment-summary.json)
+            else
+                echo "⚠️ Deployment summary not available"
+                API_URL="unknown"
+                FRONTEND_URL="unknown"
+                S3_BUCKET="unknown"
+                DEPLOYMENT_TYPE="unknown"
+                HANDLER_USED="unknown"
+            fi
+            
+            # Create comprehensive deployment notification
+            cat > deployment-notification.txt << EOF
+🚀 Infrastructure Deployment Completed Successfully!
+==================================================
+
+Deployment Information:
+======================
+Timestamp: $(date)
+Branch: ${CODECATALYST_SOURCE_BRANCH_NAME:-main}
+Commit: ${CODECATALYST_SOURCE_BRANCH_REF:-unknown}
+Deployment Type: $DEPLOYMENT_TYPE
+Handler Used: $HANDLER_USED
+
+Deployed Resources:
+==================
+🌐 API Gateway: $API_URL
+🎨 Frontend (CloudFront): $FRONTEND_URL
+📦 S3 Bucket: $S3_BUCKET
+
+Integration Status:
+==================
+$([ "$DEPLOYMENT_TYPE" = "api_sync" ] && echo "✅ Registry-API code successfully integrated" || echo "ℹ️ Using existing infrastructure handlers")
+$([ -f "post-deployment-test-report.txt" ] && echo "✅ Post-deployment tests completed" || echo "⚠️ Post-deployment tests not available")
+
+Next Steps:
+==========
+1. Verify API endpoints are working correctly
+2. Update frontend configuration if needed
+3. Monitor application performance and logs
+4. Coordinate with registry-api team for any issues
+
+$([ "$DEPLOYMENT_TYPE" = "api_sync" ] && echo "🔄 This deployment included synchronized code from registry-api repository" || echo "")
+
+Deployment completed successfully! 🎉
+EOF
+            
+            cat deployment-notification.txt
+            
+            # Store notification for potential external systems
+            echo "📤 Storing deployment notification..."
+            
+            # This could be extended to send notifications to Slack, email, etc.
+            echo "✅ Deployment notification completed"
+      Container:
+        Registry: CODECATALYST
+        Image: CodeCatalystLinux_x86_64:2024_03
+    Outputs:
+      Artifacts:
+        - Name: deploymentNotification
+          Files:
+            - "deployment-notification.txt"

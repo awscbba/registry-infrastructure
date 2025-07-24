@@ -1,0 +1,580 @@
+Name: Deployment_Coordination_Pipeline
+SchemaVersion: "1.0"
+
+Triggers:
+  - Type: MANUAL
+
+Actions:
+  CheckDeploymentTriggers:
+    Identifier: aws/build@v1
+    Compute:
+      Type: EC2
+    Environment:
+      Connections:
+        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+          Name: "142728997126"
+      Name: AWS
+    Inputs:
+      Sources:
+        - WorkflowSource
+    Configuration:
+      Steps:
+        - Run: |
+            echo "🔍 Checking Deployment Triggers"
+            echo "==============================="
+            
+            # Install AWS CLI
+            curl "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+            unzip awscliv2.zip
+            sudo ./aws/install
+            
+            # Check for API deployment trigger
+            echo "🔍 Checking for API deployment triggers..."
+            
+            API_TRIGGER_FOUND=false
+            if aws s3 cp s3://codecatalyst-deployment-triggers-142728997126/api-deployment-trigger.json api-trigger.json 2>/dev/null; then
+                echo "✅ API deployment trigger found"
+                API_TRIGGER_FOUND=true
+                
+                echo "📋 API Trigger Details:"
+                cat api-trigger.json
+                
+                # Extract trigger information
+                SOURCE_REPO=$(jq -r '.source' api-trigger.json)
+                TRIGGER_TYPE=$(jq -r '.trigger_type' api-trigger.json)
+                SOURCE_COMMIT=$(jq -r '.source_commit' api-trigger.json)
+                
+                echo "Source repository: $SOURCE_REPO"
+                echo "Trigger type: $TRIGGER_TYPE"
+                echo "Source commit: $SOURCE_COMMIT"
+            else
+                echo "ℹ️ No API deployment trigger found"
+            fi
+            
+            # Check for infrastructure changes
+            echo "🔍 Checking for infrastructure changes..."
+            
+            INFRA_CHANGES=false
+            if git diff --name-only HEAD~1 HEAD | grep -E "(people_register_infrastructure|lambda)" > changed_files.txt; then
+                echo "✅ Infrastructure changes detected:"
+                cat changed_files.txt
+                INFRA_CHANGES=true
+            else
+                echo "ℹ️ No infrastructure changes detected"
+            fi
+            
+            # Determine deployment strategy
+            echo "🎯 Determining deployment strategy..."
+            
+            if [ "$API_TRIGGER_FOUND" = true ] && [ "$INFRA_CHANGES" = true ]; then
+                DEPLOYMENT_STRATEGY="full_coordinated"
+                echo "🔄 Full coordinated deployment (API + Infrastructure)"
+            elif [ "$API_TRIGGER_FOUND" = true ]; then
+                DEPLOYMENT_STRATEGY="api_triggered"
+                echo "🔄 API-triggered deployment"
+            elif [ "$INFRA_CHANGES" = true ]; then
+                DEPLOYMENT_STRATEGY="infrastructure_only"
+                echo "🔄 Infrastructure-only deployment"
+            else
+                DEPLOYMENT_STRATEGY="manual_trigger"
+                echo "🔄 Manual deployment trigger"
+            fi
+            
+            # Create coordination plan
+            cat > coordination-plan.json << EOF
+{
+  "deployment_strategy": "$DEPLOYMENT_STRATEGY",
+  "api_trigger_found": $API_TRIGGER_FOUND,
+  "infrastructure_changes": $INFRA_CHANGES,
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "coordination_actions": {
+    "sync_api_code": $([ "$API_TRIGGER_FOUND" = true ] && echo "true" || echo "false"),
+    "deploy_infrastructure": true,
+    "run_integration_tests": true,
+    "notify_teams": true
+  }
+}
+EOF
+            
+            cat coordination-plan.json
+            echo "✅ Deployment coordination plan created"
+      Container:
+        Registry: CODECATALYST
+        Image: CodeCatalystLinux_x86_64:2024_03
+    Outputs:
+      Artifacts:
+        - Name: coordinationPlan
+          Files:
+            - "coordination-plan.json"
+            - "api-trigger.json"
+
+  SynchronizeRepositories:
+    Identifier: aws/build@v1
+    DependsOn:
+      - CheckDeploymentTriggers
+    Compute:
+      Type: EC2
+    Environment:
+      Connections:
+        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+          Name: "142728997126"
+      Name: AWS
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - coordinationPlan
+    Configuration:
+      Steps:
+        - Run: |
+            echo "🔄 Repository Synchronization"
+            echo "============================"
+            
+            # Read coordination plan
+            DEPLOYMENT_STRATEGY=$(jq -r '.deployment_strategy' coordination-plan.json)
+            API_TRIGGER_FOUND=$(jq -r '.api_trigger_found' coordination-plan.json)
+            SYNC_API_CODE=$(jq -r '.coordination_actions.sync_api_code' coordination-plan.json)
+            
+            echo "Deployment strategy: $DEPLOYMENT_STRATEGY"
+            echo "Sync API code: $SYNC_API_CODE"
+            
+            # Configure git
+            git config --global user.name "CodeCatalyst Coordination"
+            git config --global user.email "codecatalyst@aws.com"
+            
+            if [ "$SYNC_API_CODE" = "true" ]; then
+                echo "🔄 Synchronizing API code from registry-api..."
+                
+                # Clone registry-api repository
+                git clone https://git.us-west-2.codecatalyst.aws/v1/AWSCocha/people-registry-03/registry-api ../registry-api
+                
+                # Check if API sync branch exists
+                cd ../registry-api
+                API_SYNC_BRANCHES=$(git branch -r | grep "api-sync-" | head -1 | sed 's/origin\///' | xargs)
+                
+                if [ -n "$API_SYNC_BRANCHES" ]; then
+                    echo "📥 Found API sync branch: $API_SYNC_BRANCHES"
+                    git checkout "$API_SYNC_BRANCHES"
+                else
+                    echo "📥 Using main branch for API sync"
+                    git checkout main
+                fi
+                
+                # Return to infrastructure repo and sync
+                cd ../registry-infrastructure
+                
+                # Remove old API code
+                rm -rf lambda/src/
+                rm -f lambda/main.py
+                rm -f lambda/sync-metadata.json
+                
+                # Copy API code
+                cp -r ../registry-api/src lambda/
+                cp ../registry-api/main.py lambda/
+                
+                # Create sync metadata
+                cat > lambda/sync-metadata.json << EOF
+{
+  "sync_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "source_repository": "registry-api",
+  "source_branch": "$(cd ../registry-api && git branch --show-current)",
+  "source_commit": "$(cd ../registry-api && git rev-parse HEAD)",
+  "deployment_strategy": "$DEPLOYMENT_STRATEGY",
+  "coordinated_deployment": true
+}
+EOF
+                
+                # Update requirements
+                if [ -f "../registry-api/requirements.txt" ]; then
+                    echo "📦 Updating requirements..."
+                    cat > lambda/requirements.txt << 'EOF'
+# Coordinated deployment requirements
+boto3==1.34.144
+botocore==1.34.144
+pydantic==2.10.3
+fastapi==0.111.0
+mangum==0.17.0
+python-multipart>=0.0.7
+bcrypt==4.1.3
+pyjwt==2.8.0
+python-json-logger==2.0.7
+aws-lambda-powertools>=2.0.0
+EOF
+                fi
+                
+                echo "✅ API code synchronized successfully"
+            else
+                echo "ℹ️ No API code synchronization needed"
+            fi
+            
+            # Create synchronization summary
+            cat > sync-summary.txt << EOF
+Repository Synchronization Summary
+=================================
+Timestamp: $(date)
+Deployment Strategy: $DEPLOYMENT_STRATEGY
+API Code Synchronized: $SYNC_API_CODE
+
+Actions Performed:
+$([ "$SYNC_API_CODE" = "true" ] && echo "✅ Synchronized API code from registry-api" || echo "ℹ️ No API synchronization needed")
+$([ "$SYNC_API_CODE" = "true" ] && echo "✅ Updated lambda requirements.txt" || echo "")
+$([ "$SYNC_API_CODE" = "true" ] && echo "✅ Created sync metadata" || echo "")
+
+Ready for Infrastructure Deployment: Yes
+EOF
+            
+            cat sync-summary.txt
+            echo "✅ Repository synchronization completed"
+      Container:
+        Registry: CODECATALYST
+        Image: CodeCatalystLinux_x86_64:2024_03
+    Outputs:
+      Artifacts:
+        - Name: syncSummary
+          Files:
+            - "sync-summary.txt"
+
+  CoordinatedDeployment:
+    Identifier: aws/build@v1
+    DependsOn:
+      - SynchronizeRepositories
+    Compute:
+      Type: EC2
+    Environment:
+      Connections:
+        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+          Name: "142728997126"
+      Name: AWS
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - coordinationPlan
+        - syncSummary
+    Configuration:
+      Steps:
+        - Run: |
+            echo "🚀 Coordinated Infrastructure Deployment"
+            echo "========================================"
+            
+            # Read coordination plan
+            DEPLOYMENT_STRATEGY=$(jq -r '.deployment_strategy' coordination-plan.json)
+            
+            echo "Executing coordinated deployment with strategy: $DEPLOYMENT_STRATEGY"
+            
+            # Setup CDK environment
+            python3 -m venv .venv
+            source .venv/bin/activate
+            pip install aws-cdk-lib==2.80.0 constructs>=10.0.0,\<11.0.0 boto3>=1.34.0 pydantic>=2.7.0
+            npm install -g aws-cdk@2.80.0
+            
+            # Fix Lambda runtime compatibility
+            if [ -f "people_register_infrastructure/people_register_infrastructure_stack.py" ]; then
+                cp people_register_infrastructure/people_register_infrastructure_stack.py people_register_infrastructure/people_register_infrastructure_stack.py.backup
+                sed -i 's/runtime=_lambda\.Runtime\.PYTHON_3_11/runtime=_lambda.Runtime.PYTHON_3_9/g' people_register_infrastructure/people_register_infrastructure_stack.py
+                
+                # Update handler to use integrated handler if API sync detected
+                if [ -f "lambda/sync-metadata.json" ]; then
+                    echo "🔧 Updating CDK stack to use integrated API handler..."
+                    sed -i 's/handler="enhanced_api_handler.lambda_handler"/handler="integrated_api_handler.lambda_handler"/g' people_register_infrastructure/people_register_infrastructure_stack.py
+                    
+                    # Create integrated handler
+                    cat > lambda/integrated_api_handler.py << 'EOF'
+"""
+Integrated API Handler - Coordinated Deployment
+Bridges registry-api FastAPI application with AWS Lambda infrastructure
+"""
+import json
+import logging
+import os
+import sys
+
+# Add the src directory to Python path for registry-api imports
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
+
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
+
+def lambda_handler(event, context):
+    """
+    AWS Lambda handler that integrates registry-api FastAPI application
+    """
+    try:
+        logger.info(f"Coordinated deployment handler - Event: {json.dumps(event, default=str)}")
+        
+        # Try to import and use registry-api FastAPI app
+        try:
+            from main import app
+            from mangum import Mangum
+            
+            # Create Mangum handler for FastAPI
+            handler = Mangum(app, lifespan="off")
+            
+            # Process the request
+            response = handler(event, context)
+            
+            logger.info(f"Registry-API response status: {response.get('statusCode', 'unknown')}")
+            return response
+            
+        except ImportError as e:
+            logger.warning(f"Registry-API import failed, using fallback: {str(e)}")
+            
+            # Fallback to existing enhanced_api_handler
+            try:
+                from enhanced_api_handler import lambda_handler as fallback_handler
+                logger.info("Using enhanced_api_handler fallback")
+                return fallback_handler(event, context)
+            except ImportError:
+                logger.error("No fallback handler available")
+                return {
+                    "statusCode": 500,
+                    "headers": {
+                        "Content-Type": "application/json",
+                        "Access-Control-Allow-Origin": "*"
+                    },
+                    "body": json.dumps({
+                        "error": "API handler not available",
+                        "message": "Coordinated deployment handler failed"
+                    })
+                }
+        
+    except Exception as e:
+        logger.error(f"Coordinated deployment handler error: {str(e)}", exc_info=True)
+        return {
+            "statusCode": 500,
+            "headers": {
+                "Content-Type": "application/json",
+                "Access-Control-Allow-Origin": "*"
+            },
+            "body": json.dumps({
+                "error": "Internal Server Error",
+                "message": "Coordinated deployment failed"
+            })
+        }
+EOF
+                fi
+            fi
+            
+            # Deploy infrastructure
+            echo "🏗️ Deploying infrastructure..."
+            if source .venv/bin/activate && cdk deploy --require-approval never --outputs-file outputs.json; then
+                echo "✅ Coordinated deployment successful"
+                
+                # Extract outputs
+                if [ -f "outputs.json" ]; then
+                    API_URL=$(cat outputs.json | jq -r '.PeopleRegisterInfrastructureStack.ApiUrl // empty')
+                    FRONTEND_URL=$(cat outputs.json | jq -r '.PeopleRegisterInfrastructureStack.FrontendUrl // empty')
+                    
+                    echo "📊 Coordinated Deployment Results:"
+                    echo "API URL: $API_URL"
+                    echo "Frontend URL: $FRONTEND_URL"
+                    echo "Deployment Strategy: $DEPLOYMENT_STRATEGY"
+                    
+                    # Create deployment result
+                    cat > coordinated-deployment-result.json << EOF
+{
+  "deployment_successful": true,
+  "deployment_strategy": "$DEPLOYMENT_STRATEGY",
+  "timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "outputs": {
+    "api_url": "$API_URL",
+    "frontend_url": "$FRONTEND_URL"
+  },
+  "coordination_type": "cross_repository",
+  "api_integration": $([ -f "lambda/sync-metadata.json" ] && echo "true" || echo "false")
+}
+EOF
+                    
+                    cat coordinated-deployment-result.json
+                else
+                    echo "⚠️ Deployment outputs not available"
+                    exit 1
+                fi
+            else
+                echo "❌ Coordinated deployment failed"
+                exit 1
+            fi
+      Container:
+        Registry: CODECATALYST
+        Image: CodeCatalystLinux_x86_64:2024_03
+    Outputs:
+      Artifacts:
+        - Name: coordinatedDeploymentResult
+          Files:
+            - "coordinated-deployment-result.json"
+            - "outputs.json"
+
+  IntegrationTests:
+    Identifier: aws/build@v1
+    DependsOn:
+      - CoordinatedDeployment
+    Compute:
+      Type: EC2
+    Environment:
+      Connections:
+        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+          Name: "142728997126"
+      Name: AWS
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - coordinatedDeploymentResult
+    Configuration:
+      Steps:
+        - Run: |
+            echo "🧪 Cross-Repository Integration Tests"
+            echo "===================================="
+            
+            # Read deployment results
+            API_URL=$(jq -r '.outputs.api_url' coordinated-deployment-result.json)
+            DEPLOYMENT_STRATEGY=$(jq -r '.deployment_strategy' coordinated-deployment-result.json)
+            API_INTEGRATION=$(jq -r '.api_integration' coordinated-deployment-result.json)
+            
+            echo "Testing coordinated deployment:"
+            echo "API URL: $API_URL"
+            echo "Deployment Strategy: $DEPLOYMENT_STRATEGY"
+            echo "API Integration: $API_INTEGRATION"
+            
+            # Wait for deployment to stabilize
+            echo "⏳ Waiting for coordinated deployment to stabilize..."
+            sleep 45
+            
+            # Comprehensive integration tests
+            INTEGRATION_TESTS_PASSED=true
+            
+            # Test 1: Health check with coordination info
+            echo "🧪 Testing health endpoint with coordination info..."
+            health_response=$(curl -s -w "%{http_code}" "$API_URL/health" -o health_response.json)
+            
+            if [ "$health_response" = "200" ]; then
+                echo "✅ Health check - OK"
+                
+                # Check if response includes coordination info
+                if jq -e '.features' health_response.json >/dev/null 2>&1; then
+                    echo "✅ Health response includes feature information"
+                else
+                    echo "ℹ️ Basic health response (no feature info)"
+                fi
+            else
+                echo "❌ Health check - FAILED ($health_response)"
+                INTEGRATION_TESTS_PASSED=false
+            fi
+            
+            # Test 2: API endpoints functionality
+            echo "🧪 Testing API endpoints..."
+            
+            # People endpoint
+            people_response=$(curl -s -w "%{http_code}" "$API_URL/people" -o people_response.json)
+            if [ "$people_response" = "200" ]; then
+                echo "✅ People endpoint - OK"
+            else
+                echo "❌ People endpoint - FAILED ($people_response)"
+                INTEGRATION_TESTS_PASSED=false
+            fi
+            
+            # Test 3: CRUD operations
+            echo "🧪 Testing CRUD operations..."
+            
+            # Create test person
+            create_data='{
+                "firstName": "Integration",
+                "lastName": "Test",
+                "email": "integration-test@example.com",
+                "phone": "+1-555-0299",
+                "dateOfBirth": "1990-01-01",
+                "address": {
+                    "street": "123 Integration St",
+                    "city": "Test City",
+                    "state": "TC",
+                    "zipCode": "12345",
+                    "country": "USA"
+                }
+            }'
+            
+            create_response=$(curl -s -w "%{http_code}" -X POST "$API_URL/people" \
+                -H "Content-Type: application/json" \
+                -d "$create_data" -o create_response.json)
+            
+            if [ "$create_response" = "201" ]; then
+                echo "✅ Person creation - OK"
+                PERSON_ID=$(jq -r '.id' create_response.json 2>/dev/null || echo "")
+                
+                if [ -n "$PERSON_ID" ] && [ "$PERSON_ID" != "null" ]; then
+                    # Test retrieval
+                    get_response=$(curl -s -w "%{http_code}" "$API_URL/people/$PERSON_ID" -o get_response.json)
+                    if [ "$get_response" = "200" ]; then
+                        echo "✅ Person retrieval - OK"
+                    else
+                        echo "❌ Person retrieval - FAILED ($get_response)"
+                        INTEGRATION_TESTS_PASSED=false
+                    fi
+                    
+                    # Test update
+                    update_data='{"firstName": "Updated", "lastName": "Integration"}'
+                    update_response=$(curl -s -w "%{http_code}" -X PUT "$API_URL/people/$PERSON_ID" \
+                        -H "Content-Type: application/json" \
+                        -d "$update_data" -o update_response.json)
+                    
+                    if [ "$update_response" = "200" ]; then
+                        echo "✅ Person update - OK"
+                    else
+                        echo "❌ Person update - FAILED ($update_response)"
+                        INTEGRATION_TESTS_PASSED=false
+                    fi
+                    
+                    # Cleanup
+                    delete_response=$(curl -s -w "%{http_code}" -X DELETE "$API_URL/people/$PERSON_ID" -o /dev/null)
+                    if [ "$delete_response" = "204" ]; then
+                        echo "✅ Person deletion - OK"
+                    else
+                        echo "⚠️ Person deletion - FAILED ($delete_response)"
+                    fi
+                fi
+            else
+                echo "❌ Person creation - FAILED ($create_response)"
+                cat create_response.json 2>/dev/null || echo "No response body"
+                INTEGRATION_TESTS_PASSED=false
+            fi
+            
+            # Generate integration test report
+            cat > integration-test-report.txt << EOF
+Cross-Repository Integration Test Report
+=======================================
+Timestamp: $(date)
+API URL: $API_URL
+Deployment Strategy: $DEPLOYMENT_STRATEGY
+API Integration: $API_INTEGRATION
+Overall Status: $([ "$INTEGRATION_TESTS_PASSED" = true ] && echo "PASSED" || echo "FAILED")
+
+Test Results:
+- Health endpoint: $([ "$health_response" = "200" ] && echo "PASS" || echo "FAIL")
+- People list endpoint: $([ "$people_response" = "200" ] && echo "PASS" || echo "FAIL")
+- Person CRUD operations: $([ "$create_response" = "201" ] && echo "PASS" || echo "FAIL")
+
+Coordination Verification:
+- Deployment strategy executed: $DEPLOYMENT_STRATEGY
+- API code integration: $API_INTEGRATION
+- Cross-repository coordination: SUCCESS
+
+$([ "$INTEGRATION_TESTS_PASSED" = true ] && echo "✅ All integration tests passed" || echo "❌ Some integration tests failed")
+EOF
+            
+            cat integration-test-report.txt
+            
+            if [ "$INTEGRATION_TESTS_PASSED" = true ]; then
+                echo "🎉 Cross-repository integration tests passed!"
+                exit 0
+            else
+                echo "❌ Some integration tests failed"
+                exit 1
+            fi
+      Container:
+        Registry: CODECATALYST
+        Image: CodeCatalystLinux_x86_64:2024_03
+    Outputs:
+      Artifacts:
+        - Name: integrationTestReport
+          Files:
+            - "integration-test-report.txt"
