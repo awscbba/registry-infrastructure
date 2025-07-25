@@ -97,12 +97,12 @@ Actions:
             echo "  \"timestamp\": \"$TIMESTAMP\"," >> deployment-context.json
             echo "  \"branch\": \"$BRANCH\"," >> deployment-context.json
             echo "  \"commit\": \"$COMMIT\"," >> deployment-context.json
-            echo "  \"api_sync_detected\": $API_SYNC_DETECTED," >> deployment-context.json
+            echo "  \"api_sync_detected\": \"$API_SYNC_DETECTED\"," >> deployment-context.json
             echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> deployment-context.json
             echo "  \"trigger_type\": \"$TRIGGER_TYPE\"," >> deployment-context.json
-            echo "  \"is_main_branch\": $IS_MAIN_BRANCH," >> deployment-context.json
-            echo "  \"skip_deployment\": $SKIP_DEPLOYMENT," >> deployment-context.json
-            echo "  \"skip_testing\": $SKIP_TESTING" >> deployment-context.json
+            echo "  \"is_main_branch\": \"$IS_MAIN_BRANCH\"," >> deployment-context.json
+            echo "  \"skip_deployment\": \"$SKIP_DEPLOYMENT\"," >> deployment-context.json
+            echo "  \"skip_testing\": \"$SKIP_TESTING\"" >> deployment-context.json
             echo "}" >> deployment-context.json
             
             cat deployment-context.json
@@ -594,8 +594,8 @@ Actions:
                 # Create validation success artifact
                 echo "{" > validation-results.json
                 echo "  \"status\": \"success\"," >> validation-results.json
-                echo "  \"errors\": $VALIDATION_ERRORS," >> validation-results.json
-                echo "  \"warnings\": $VALIDATION_WARNINGS," >> validation-results.json
+                echo "  \"errors\": \"$VALIDATION_ERRORS\"," >> validation-results.json
+                echo "  \"warnings\": \"$VALIDATION_WARNINGS\"," >> validation-results.json
                 echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," >> validation-results.json
                 echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> validation-results.json
                 echo "  \"cdk_synthesis\": \"success\"," >> validation-results.json
@@ -613,8 +613,8 @@ Actions:
                 # Create validation failure artifact
                 echo "{" > validation-results.json
                 echo "  \"status\": \"failed\"," >> validation-results.json
-                echo "  \"errors\": $VALIDATION_ERRORS," >> validation-results.json
-                echo "  \"warnings\": $VALIDATION_WARNINGS," >> validation-results.json
+                echo "  \"errors\": \"$VALIDATION_ERRORS\"," >> validation-results.json
+                echo "  \"warnings\": \"$VALIDATION_WARNINGS\"," >> validation-results.json
                 echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"," >> validation-results.json
                 echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> validation-results.json
                 echo "  \"cdk_synthesis\": \"failed\"," >> validation-results.json
@@ -864,7 +864,7 @@ Actions:
 {
   "deployment_successful": true,
   "deployment_type": "$DEPLOYMENT_TYPE",
-  "api_sync_detected": $API_SYNC_DETECTED,
+  "api_sync_detected": "$API_SYNC_DETECTED",
   "timestamp": "$TIMESTAMP",
   "execution_mode": "$EXECUTION_MODE",
   "trigger_type": "$TRIGGER_TYPE",
@@ -881,8 +881,8 @@ Actions:
   "compatibility_mode": false,
   "deployment_metadata": {
     "cdk_version": "2.80.0",
-    "deployment_start": $DEPLOYMENT_START,
-    "deployment_end": $DEPLOYMENT_END,
+    "deployment_start": "$DEPLOYMENT_START",
+    "deployment_end": "$DEPLOYMENT_END",
     "aws_region": "${AWS_DEFAULT_REGION:-us-east-1}"
   }
 }
@@ -913,7 +913,7 @@ EOF
 {
   "deployment_successful": false,
   "deployment_type": "$DEPLOYMENT_TYPE",
-  "api_sync_detected": $API_SYNC_DETECTED,
+  "api_sync_detected": "$API_SYNC_DETECTED",
   "timestamp": "$TIMESTAMP",
   "execution_mode": "$EXECUTION_MODE",
   "trigger_type": "$TRIGGER_TYPE",
@@ -943,7 +943,7 @@ EOF
 {
   "deployment_successful": false,
   "deployment_type": "$DEPLOYMENT_TYPE",
-  "api_sync_detected": $API_SYNC_DETECTED,
+  "api_sync_detected": "$API_SYNC_DETECTED",
   "timestamp": "$TIMESTAMP",
   "execution_mode": "$EXECUTION_MODE",
   "trigger_type": "$TRIGGER_TYPE",
