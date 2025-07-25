@@ -6,7 +6,7 @@ Triggers:
     # Run on feature branch pushes for fast feedback during development
     # Exclude main branch to avoid duplication with deployment workflow
     Branches:
-      - feature\-.*  # Only features branches
+      - feature/*  # Only feature branches (feature/branch-name pattern)
   - Type: PULLREQUEST
     Branches:
       - main
