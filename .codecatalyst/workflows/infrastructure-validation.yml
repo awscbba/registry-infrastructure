@@ -3,7 +3,10 @@ SchemaVersion: "1.0"
 
 Triggers:
   - Type: PUSH
-    # Temporarily test with no branch restrictions to see if workflow triggers at all
+    # Run on any branch push except main for fast feedback during development
+    # Exclude main branch to avoid duplication with deployment workflow
+    Branches:
+      - "!main"
   - Type: PULLREQUEST
     Branches:
       - main
