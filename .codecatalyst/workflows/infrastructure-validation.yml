@@ -3,10 +3,10 @@ SchemaVersion: "1.0"
 
 Triggers:
   - Type: PUSH
-    # Run on any branch push except main for fast feedback during development
-    # Exclude main branch to avoid duplication with deployment workflow
+    # Run on feature branches for fast feedback during development
+    # Use explicit pattern matching for feature branches
     Branches:
-      - "!main"
+      - "feature/**"
   - Type: PULLREQUEST
     Branches:
       - main
