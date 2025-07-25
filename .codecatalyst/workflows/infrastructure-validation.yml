@@ -6,7 +6,7 @@ Triggers:
     # For now, explicitly list the current feature branch
     # TODO: Find the correct pattern syntax for feature branches
     Branches:
-      - feature/person-crud-completion
+      - feature//.*
   - Type: PULLREQUEST
     Branches:
       - main
