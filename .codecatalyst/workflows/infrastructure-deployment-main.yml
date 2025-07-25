@@ -3,13 +3,8 @@ SchemaVersion: "1.0"
 
 Triggers:
   - Type: PUSH
-    # Run on any branch push for fast feedback during development
-  - Type: PULLREQUEST
     Branches:
       - main
-    Events:
-      - OPEN
-      - REVISION
   - Type: MANUAL
 
 Actions:
@@ -33,23 +28,10 @@ Actions:
             echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo ""
 
-            # Set execution mode based on trigger and branch
-            BRANCH_NAME="${CODECATALYST_SOURCE_BRANCH_NAME:-unknown}"
-            TRIGGER_TYPE="${CODECATALYST_TRIGGER_TYPE:-PUSH}"
-            
-            if [ "$TRIGGER_TYPE" = "PULLREQUEST" ]; then
-                export EXECUTION_MODE="validation"
-                export SKIP_DEPLOYMENT="true"
-                echo "🎯 Mode: validation (PR to main)"
-            elif [ "$BRANCH_NAME" = "main" ]; then
-                export EXECUTION_MODE="deployment"
-                export SKIP_DEPLOYMENT="false"
-                echo "🎯 Mode: deployment (main branch push)"
-            else
-                export EXECUTION_MODE="validation"
-                export SKIP_DEPLOYMENT="true"
-                echo "🎯 Mode: validation (feature branch push: $BRANCH_NAME)"
-            fi
+            # Set execution mode - always deployment for main branch
+            export EXECUTION_MODE="deployment"
+            export SKIP_DEPLOYMENT="false"
+            echo "🎯 Mode: deployment (main branch push)"
 
             # Check for API sync
             if [ -f "lambda/main.py" ] && [ -d "lambda/src" ]; then
@@ -204,86 +186,64 @@ Actions:
                 EXECUTION_MODE=$(jq -r '.execution_mode' deployment-context.json)
                 SKIP_DEPLOYMENT=$(jq -r '.skip_deployment' deployment-context.json)
             else
-                # Fallback: determine mode from trigger type and branch
-                BRANCH_NAME="${CODECATALYST_SOURCE_BRANCH_NAME:-unknown}"
-                TRIGGER_TYPE="${CODECATALYST_TRIGGER_TYPE:-PUSH}"
-                
-                if [ "$TRIGGER_TYPE" = "PULLREQUEST" ]; then
-                    EXECUTION_MODE="validation"
-                    SKIP_DEPLOYMENT="true"
-                elif [ "$BRANCH_NAME" = "main" ]; then
-                    EXECUTION_MODE="deployment"
-                    SKIP_DEPLOYMENT="false"
-                else
-                    EXECUTION_MODE="validation"
-                    SKIP_DEPLOYMENT="true"
-                fi
+                # This workflow only runs on main, so always deploy
+                EXECUTION_MODE="deployment"
+                SKIP_DEPLOYMENT="false"
             fi
 
             echo "🎯 Mode: $EXECUTION_MODE"
             echo "🔄 Skip Deployment: $SKIP_DEPLOYMENT"
             echo ""
 
-            if [ "$SKIP_DEPLOYMENT" = "true" ]; then
-                echo "⏭️ Skipping deployment (validation mode for PR)"
-                echo "📋 This is a pull request validation - no actual deployment will occur"
-                
-                # Create placeholder artifacts for PR validation
-                echo '{"status":"skipped","reason":"validation_mode"}' > deployment-results.json
-                echo "Deployment: SKIPPED (validation mode)" > deployment-report.txt
-                
-                echo "✅ Validation pipeline completed successfully"
-            else
-                echo "🚀 Proceeding with infrastructure deployment..."
-                
-                # Set up CDK environment
-                npm install -g aws-cdk@2.60.0 > /dev/null 2>&1
-                python3 -m venv .venv > /dev/null 2>&1
-                source .venv/bin/activate
-                pip install -r requirements.txt > /dev/null 2>&1
+            echo "🚀 Proceeding with infrastructure deployment..."
+            
+            # Set up CDK environment
+            npm install -g aws-cdk@2.60.0 > /dev/null 2>&1
+            python3 -m venv .venv > /dev/null 2>&1
+            source .venv/bin/activate
+            pip install -r requirements.txt > /dev/null 2>&1
 
-                # Suppress Node.js warnings
-                export CDK_DISABLE_VERSION_CHECK=1
-                export NODE_NO_WARNINGS=1
+            # Suppress Node.js warnings
+            export CDK_DISABLE_VERSION_CHECK=1
+            export NODE_NO_WARNINGS=1
 
-                # Deploy infrastructure with intelligent error handling
-                echo "Deploying CDK stacks..."
-                cdk deploy --all --require-approval never > deployment-output.txt 2>deployment-errors.txt
-                DEPLOY_EXIT_CODE=$?
+            # Deploy infrastructure with intelligent error handling
+            echo "Deploying CDK stacks..."
+            cdk deploy --all --require-approval never > deployment-output.txt 2>deployment-errors.txt
+            DEPLOY_EXIT_CODE=$?
+            
+            # Check if the failure is just due to Node.js warnings
+            if [ $DEPLOY_EXIT_CODE -eq 0 ]; then
+                echo "✅ Infrastructure deployment successful"
+                DEPLOYMENT_STATUS="success"
+            elif grep -q "Node.*has reached end-of-life" deployment-errors.txt; then
+                echo "⚠️ Node.js end-of-life warning detected - checking if deployment actually succeeded..."
                 
-                # Check if the failure is just due to Node.js warnings
-                if [ $DEPLOY_EXIT_CODE -eq 0 ]; then
-                    echo "✅ Infrastructure deployment successful"
+                # Check if deployment actually succeeded despite warnings
+                if grep -q "Stack ARN:" deployment-output.txt || grep -q "✅" deployment-output.txt; then
+                    echo "✅ Infrastructure deployment succeeded despite Node.js warnings"
+                    echo "📋 Node.js warning is informational only - deployment completed"
                     DEPLOYMENT_STATUS="success"
-                elif grep -q "Node.*has reached end-of-life" deployment-errors.txt; then
-                    echo "⚠️ Node.js end-of-life warning detected - checking if deployment actually succeeded..."
-                    
-                    # Check if deployment actually succeeded despite warnings
-                    if grep -q "Stack ARN:" deployment-output.txt || grep -q "✅" deployment-output.txt; then
-                        echo "✅ Infrastructure deployment succeeded despite Node.js warnings"
-                        echo "📋 Node.js warning is informational only - deployment completed"
-                        DEPLOYMENT_STATUS="success"
-                    else
-                        echo "❌ Infrastructure deployment failed - no successful deployment indicators found"
-                        DEPLOYMENT_STATUS="failed"
-                    fi
                 else
-                    echo "❌ Infrastructure deployment failed - real deployment errors"
+                    echo "❌ Infrastructure deployment failed - no successful deployment indicators found"
                     DEPLOYMENT_STATUS="failed"
                 fi
-                
-                # Create artifacts based on deployment status
-                if [ "$DEPLOYMENT_STATUS" = "success" ]; then
-                    echo '{"status":"success","execution_mode":"'$EXECUTION_MODE'"}' > deployment-results.json
-                    echo "Deployment: SUCCESS" > deployment-report.txt
-                else
-                    echo '{"status":"failed","execution_mode":"'$EXECUTION_MODE'"}' > deployment-results.json
-                    echo "Deployment: FAILED" > deployment-report.txt
-                    echo ""
-                    echo "Deployment errors:"
-                    head -20 deployment-errors.txt
-                    exit 1
-                fi
+            else
+                echo "❌ Infrastructure deployment failed - real deployment errors"
+                DEPLOYMENT_STATUS="failed"
+            fi
+            
+            # Create artifacts based on deployment status
+            if [ "$DEPLOYMENT_STATUS" = "success" ]; then
+                echo '{"status":"success","execution_mode":"'$EXECUTION_MODE'"}' > deployment-results.json
+                echo "Deployment: SUCCESS" > deployment-report.txt
+            else
+                echo '{"status":"failed","execution_mode":"'$EXECUTION_MODE'"}' > deployment-results.json
+                echo "Deployment: FAILED" > deployment-report.txt
+                echo ""
+                echo "Deployment errors:"
+                head -20 deployment-errors.txt
+                exit 1
             fi
 
             echo ""

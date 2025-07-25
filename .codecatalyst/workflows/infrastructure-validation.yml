@@ -1,0 +1,172 @@
+Name: Infrastructure_Validation_Pipeline
+SchemaVersion: "1.0"
+
+Triggers:
+  - Type: PUSH
+    # Run on any branch push for fast feedback during development
+  - Type: PULLREQUEST
+    Branches:
+      - main
+    Events:
+      - OPEN
+      - REVISION
+  - Type: MANUAL
+
+Actions:
+  CheckAPISync:
+    Identifier: aws/build@v1
+    Compute:
+      Type: EC2
+    Environment:
+      Connections:
+        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+          Name: "142728997126"
+      Name: AWS
+    Inputs:
+      Sources:
+        - WorkflowSource
+    Configuration:
+      Steps:
+        - Run: |
+            echo "🔍 Checking API Code Synchronization"
+            echo "==================================="
+            echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo ""
+
+            # Set execution mode - always validation for this workflow
+            BRANCH_NAME="${CODECATALYST_SOURCE_BRANCH_NAME:-unknown}"
+            TRIGGER_TYPE="${CODECATALYST_TRIGGER_TYPE:-PUSH}"
+            
+            export EXECUTION_MODE="validation"
+            export SKIP_DEPLOYMENT="true"
+            
+            if [ "$TRIGGER_TYPE" = "PULLREQUEST" ]; then
+                echo "🎯 Mode: validation (PR to main)"
+            else
+                echo "🎯 Mode: validation (branch push: $BRANCH_NAME)"
+            fi
+
+            # Check for API sync
+            if [ -f "lambda/main.py" ] && [ -d "lambda/src" ]; then
+                echo "✅ API code synchronized from registry-api repository"
+                API_SYNC_DETECTED="true"
+            else
+                echo "ℹ️ No API sync detected - using existing lambda handlers"
+                API_SYNC_DETECTED="false"
+            fi
+
+            # Create deployment context
+            echo "{" > deployment-context.json
+            echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> deployment-context.json
+            echo "  \"api_sync_detected\": \"$API_SYNC_DETECTED\"," >> deployment-context.json
+            echo "  \"skip_deployment\": \"$SKIP_DEPLOYMENT\"," >> deployment-context.json
+            echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" >> deployment-context.json
+            echo "}" >> deployment-context.json
+
+            echo "✅ API sync check completed"
+      Container:
+        Registry: CODECATALYST
+        Image: CodeCatalystLinux_x86_64:2024_03
+    Outputs:
+      Artifacts:
+        - Name: deploymentContext
+          Files:
+            - "deployment-context.json"
+
+  ValidateInfrastructure:
+    Identifier: aws/build@v1
+    DependsOn:
+      - CheckAPISync
+    Compute:
+      Type: EC2
+    Environment:
+      Connections:
+        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
+          Name: "142728997126"
+      Name: AWS
+    Inputs:
+      Sources:
+        - WorkflowSource
+      Artifacts:
+        - deploymentContext
+    Configuration:
+      Steps:
+        - Run: |
+            echo "⚡ Infrastructure Validation"
+            echo "=========================="
+            echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo ""
+
+            # Read execution mode from context
+            EXECUTION_MODE=$(jq -r '.execution_mode' deployment-context.json)
+            echo "🎯 Mode: $EXECUTION_MODE"
+            echo ""
+
+            # CDK Synthesis Check with Node.js warning handling
+            echo "🔄 CDK Synthesis Check..."
+
+            # Install CDK and dependencies (use older version that supports Node 18)
+            npm install -g aws-cdk@2.60.0 > /dev/null 2>&1
+            python3 -m venv .venv > /dev/null 2>&1
+            source .venv/bin/activate
+            pip install -r requirements.txt > /dev/null 2>&1
+
+            # Suppress Node.js end-of-life warnings for CDK
+            export CDK_DISABLE_VERSION_CHECK=1
+            export NODE_NO_WARNINGS=1
+
+            # Run CDK synthesis with intelligent error handling
+            echo "Running CDK synthesis..."
+            cdk synth > cdk-synth-output.txt 2>cdk-synth-errors.txt
+            CDK_EXIT_CODE=$?
+
+            # Check if the failure is just due to Node.js warnings
+            if [ $CDK_EXIT_CODE -eq 0 ]; then
+                echo "✅ CDK synthesis successful - Infrastructure is valid"
+                VALIDATION_STATUS="success"
+            elif grep -q "Node.*has reached end-of-life" cdk-synth-errors.txt; then
+                echo "⚠️ Node.js end-of-life warning detected - checking if synthesis actually succeeded..."
+                
+                # Check if CDK actually generated templates despite the warning
+                if ls cdk.out/*.template.json >/dev/null 2>&1 || ls cdk.out/*.template.yaml >/dev/null 2>&1; then
+                    echo "✅ CDK synthesis succeeded despite Node.js warnings (CloudFormation templates found)"
+                    echo "📋 Node.js warning is informational only - infrastructure is valid"
+                    VALIDATION_STATUS="success"
+                else
+                    echo "❌ CDK synthesis failed - no CloudFormation templates generated"
+                    VALIDATION_STATUS="failed"
+                fi
+            else
+                echo "❌ CDK synthesis failed - Infrastructure has real errors"
+                VALIDATION_STATUS="failed"
+            fi
+
+            # Create artifacts based on validation status
+            if [ "$VALIDATION_STATUS" = "success" ]; then
+                echo '{"status":"success","execution_mode":"'$EXECUTION_MODE'"}' > validation-results.json
+                echo "CDK Synthesis: SUCCESS" > validation-report.txt
+                echo "✅ Infrastructure validation completed successfully"
+                echo "📋 This was a validation-only run - no deployment performed"
+            else
+                echo '{"status":"failed","execution_mode":"'$EXECUTION_MODE'"}' > validation-results.json
+                echo "CDK Synthesis: FAILED" > validation-report.txt
+                echo ""
+                echo "Error details:"
+                head -20 cdk-synth-errors.txt
+                exit 1
+            fi
+
+            echo ""
+            echo "📊 Stage: ValidateInfrastructure - COMPLETED"
+            echo "⏱️ Duration: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+      Container:
+        Registry: CODECATALYST
+        Image: CodeCatalystLinux_x86_64:2024_03
+    Outputs:
+      Artifacts:
+        - Name: validationResults
+          Files:
+            - "validation-results.json"
+            - "validation-report.txt"
+            - "cdk-synth-output.txt"
+            - "cdk-synth-errors.txt"
