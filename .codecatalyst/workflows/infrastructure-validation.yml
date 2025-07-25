@@ -7,7 +7,7 @@ Triggers:
     # Exclude main branch to avoid duplication with deployment workflow
     Branches:
       - feature\-.*  # Only features branches
-      - !main
+      - "!main"
   - Type: PULLREQUEST
     Branches:
       - main
