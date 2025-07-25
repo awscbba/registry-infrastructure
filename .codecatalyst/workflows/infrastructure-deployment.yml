@@ -343,7 +343,7 @@ Actions:
 
             # Minimal validation - just check if CDK code compiles
             echo "� CDK aSynthesis Check..."
-            
+
             # Install CDK and dependencies
             npm install -g aws-cdk@2.80.0 > /dev/null 2>&1
             python3 -m venv .venv > /dev/null 2>&1
@@ -362,6 +362,10 @@ Actions:
                 
             else
                 echo "❌ CDK synthesis failed - Infrastructure has errors"
+                echo ""
+                echo "Error details:"
+                cdk synth 2>&1 | head -20
+                echo ""
                 
                 # Create failure artifacts
                 echo '{"status":"failed","execution_mode":"validation"}' > validation-results.json
