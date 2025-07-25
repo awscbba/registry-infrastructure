@@ -325,6 +325,60 @@ Actions:
     Configuration:
       Steps:
         - Run: |
+            echo "⚡ Infrastructure Validation (Simplified)"
+            echo "========================================"
+            echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo ""
+
+            # Set execution mode environment variables (simplified)
+            export EXECUTION_MODE="validation"
+            export TRIGGER_TYPE="${CODECATALYST_TRIGGER_TYPE:-PULLREQUEST}"
+            export BRANCH_NAME="${CODECATALYST_SOURCE_BRANCH_NAME:-feature-branch}"
+            export IS_MAIN_BRANCH="false"
+            export SKIP_DEPLOYMENT="true"
+            export SKIP_TESTING="true"
+
+            echo "🎯 Mode: $EXECUTION_MODE (fast feedback for PR)"
+            echo ""
+
+            # Essential validation only
+            echo "📦 Installing CDK..."
+            npm install -g aws-cdk@2.80.0 --silent
+
+            echo "🔄 CDK Synthesis..."
+            python3 -m venv .venv --quiet
+            source .venv/bin/activate
+            pip install -r requirements.txt --quiet
+
+            if cdk synth --quiet > /dev/null 2>&1; then
+                echo "✅ CDK synthesis successful"
+                
+                # Basic template analysis
+                if [ -f "cdk.out/PeopleRegisterInfrastructureStack.template.json" ]; then
+                    TEMPLATE_SIZE=$(wc -c < "cdk.out/PeopleRegisterInfrastructureStack.template.json")
+                    RESOURCE_COUNT=$(jq '.Resources | length' "cdk.out/PeopleRegisterInfrastructureStack.template.json" 2>/dev/null || echo "unknown")
+                    echo "📊 Template: ${TEMPLATE_SIZE} bytes, ${RESOURCE_COUNT} resources"
+                    
+                    if [ $TEMPLATE_SIZE -gt 51200 ]; then
+                        echo "⚠️ Template size exceeds 51KB (will use S3 upload)"
+                    fi
+                fi
+                
+                # Create success artifact
+                echo '{"status":"success","timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","execution_mode":"validation"}' > validation-results.json
+                
+                echo "✅ Infrastructure validation completed successfully"
+            else
+                echo "❌ CDK synthesis failed"
+                cdk synth 2>&1 | head -10
+                echo '{"status":"failed","timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","execution_mode":"validation"}' > validation-results.json
+                exit 1
+            fi
+
+            echo ""
+            echo "📊 Stage: ValidateInfrastructure - COMPLETED"
+            echo "⏱️ Duration: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+        - Run: |
             echo "⚡ Optimized Infrastructure Validation"
             echo "===================================="
             echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
