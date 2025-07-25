@@ -1344,79 +1344,77 @@ Actions:
                 echo "🔧 Updating notification with deployment-specific data..."
                 
                 # Create deployment-specific notification
-                cat > deployment-notification.txt << EOF
-🚀 Infrastructure Deployment Completed
-=====================================
-
-✅ Deployment completed successfully!
-
-📊 Deployment Context:
-  Timestamp: $TIMESTAMP
-  Trigger: $TRIGGER_TYPE
-  Branch: $BRANCH_NAME
-  Commit: $COMMIT_REF
-  Workflow: $WORKFLOW_NAME
-  Deployment Type: $DEPLOYMENT_TYPE
-  Handler Used: $HANDLER_USED
-
-🏗️ Deployed Resources:
-$([ "$API_URL" != "not_deployed" ] && echo "  🌐 API Gateway: $API_URL" || echo "  🌐 API Gateway: Deployment information not available")
-$([ "$FRONTEND_URL" != "not_deployed" ] && echo "  🎨 Frontend (CloudFront): $FRONTEND_URL" || echo "  🎨 Frontend (CloudFront): Deployment information not available")
-$([ "$S3_BUCKET" != "not_deployed" ] && echo "  📦 S3 Bucket: $S3_BUCKET" || echo "  📦 S3 Bucket: Deployment information not available")
-
-🔧 Integration Status:
-$([ "$DEPLOYMENT_TYPE" = "api_sync" ] && echo "  ✅ Registry-API code successfully integrated and deployed" || echo "  ℹ️ Using existing infrastructure handlers")
-$([ "$DEPLOYMENT_TYPE" = "api_sync" ] && echo "  🔗 Using integrated_api_handler.py with registry-api components" || echo "  🔗 Using enhanced_api_handler.py (infrastructure default)")
-
-🧪 Testing Status:
-$(case "$TEST_STATUS" in
-    "passed") echo "  ✅ Post-deployment tests: All tests passed" ;;
-    "failed") echo "  ❌ Post-deployment tests: Some tests failed - review test report" ;;
-    "completed") echo "  ✅ Post-deployment tests: Completed - review test report for details" ;;
-    "not_available") echo "  ⚠️ Post-deployment tests: Test report not available" ;;
-    *) echo "  ❓ Post-deployment tests: Status unknown" ;;
-esac)
-
-✅ Next Steps:
-  1. Verify API endpoints are responding correctly
-  2. Update frontend configuration if needed
-  3. Monitor application performance and CloudWatch logs
-  4. Coordinate with registry-api team for any integration issues
-$([ "$TEST_STATUS" = "failed" ] && echo "  5. ⚠️ Review and address failed test cases")
-
-🎉 Infrastructure deployment successful! ✅
-EOF
+                {
+                    echo "🚀 Infrastructure Deployment Completed"
+                    echo "====================================="
+                    echo ""
+                    echo "✅ Deployment completed successfully!"
+                    echo ""
+                    echo "📊 Deployment Context:"
+                    echo "  Timestamp: $TIMESTAMP"
+                    echo "  Trigger: $TRIGGER_TYPE"
+                    echo "  Branch: $BRANCH_NAME"
+                    echo "  Commit: $COMMIT_REF"
+                    echo "  Workflow: $WORKFLOW_NAME"
+                    echo "  Deployment Type: $DEPLOYMENT_TYPE"
+                    echo "  Handler Used: $HANDLER_USED"
+                    echo ""
+                    echo "🏗️ Deployed Resources:"
+                    [ "$API_URL" != "not_deployed" ] && echo "  🌐 API Gateway: $API_URL" || echo "  🌐 API Gateway: Deployment information not available"
+                    [ "$FRONTEND_URL" != "not_deployed" ] && echo "  🎨 Frontend (CloudFront): $FRONTEND_URL" || echo "  🎨 Frontend (CloudFront): Deployment information not available"
+                    [ "$S3_BUCKET" != "not_deployed" ] && echo "  📦 S3 Bucket: $S3_BUCKET" || echo "  📦 S3 Bucket: Deployment information not available"
+                    echo ""
+                    echo "🔧 Integration Status:"
+                    [ "$DEPLOYMENT_TYPE" = "api_sync" ] && echo "  ✅ Registry-API code successfully integrated and deployed" || echo "  ℹ️ Using existing infrastructure handlers"
+                    [ "$DEPLOYMENT_TYPE" = "api_sync" ] && echo "  🔗 Using integrated_api_handler.py with registry-api components" || echo "  🔗 Using enhanced_api_handler.py (infrastructure default)"
+                    echo ""
+                    echo "🧪 Testing Status:"
+                    case "$TEST_STATUS" in
+                        "passed") echo "  ✅ Post-deployment tests: All tests passed" ;;
+                        "failed") echo "  ❌ Post-deployment tests: Some tests failed - review test report" ;;
+                        "completed") echo "  ✅ Post-deployment tests: Completed - review test report for details" ;;
+                        "not_available") echo "  ⚠️ Post-deployment tests: Test report not available" ;;
+                        *) echo "  ❓ Post-deployment tests: Status unknown" ;;
+                    esac
+                    echo ""
+                    echo "✅ Next Steps:"
+                    echo "  1. Verify API endpoints are responding correctly"
+                    echo "  2. Update frontend configuration if needed"
+                    echo "  3. Monitor application performance and CloudWatch logs"
+                    echo "  4. Coordinate with registry-api team for any integration issues"
+                    [ "$TEST_STATUS" = "failed" ] && echo "  5. ⚠️ Review and address failed test cases"
+                    echo ""
+                    echo "🎉 Infrastructure deployment successful! ✅"
+                } > deployment-notification.txt
                 
                 # Update notification-data.json with real deployment data
-                cat > notification-data.json << 'EOF'
-{
-  "timestamp": "'$TIMESTAMP'",
-  "execution_mode": "'$EXECUTION_MODE'",
-  "trigger_type": "'$TRIGGER_TYPE'",
-  "branch_name": "'$BRANCH_NAME'",
-  "commit_ref": "'$COMMIT_REF'",
-  "workflow_name": "'$WORKFLOW_NAME'",
-  "deployment_type": "'$DEPLOYMENT_TYPE'",
-  "handler_used": "'$HANDLER_USED'",
-  "deployment_status": "'$DEPLOYMENT_STATUS'",
-  "test_status": "'$TEST_STATUS'",
-  "resources": {
-    "api_url": "'$API_URL'",
-    "frontend_url": "'$FRONTEND_URL'",
-    "s3_bucket": "'$S3_BUCKET'"
-  },
-  "stages_executed": [
-    "CheckAPISync",
-    "PrepareAPIIntegration", 
-    "ValidateInfrastructure",
-    "DeployInfrastructure",
-    "PostDeploymentTests"
-  ],
-  "stages_skipped": [],
-  "notification_type": "deployment_completion",
-  "placeholder_artifact": false
-}
-EOF
+                echo "{" > notification-data.json
+                echo "  \"timestamp\": \"$TIMESTAMP\"," >> notification-data.json
+                echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> notification-data.json
+                echo "  \"trigger_type\": \"$TRIGGER_TYPE\"," >> notification-data.json
+                echo "  \"branch_name\": \"$BRANCH_NAME\"," >> notification-data.json
+                echo "  \"commit_ref\": \"$COMMIT_REF\"," >> notification-data.json
+                echo "  \"workflow_name\": \"$WORKFLOW_NAME\"," >> notification-data.json
+                echo "  \"deployment_type\": \"$DEPLOYMENT_TYPE\"," >> notification-data.json
+                echo "  \"handler_used\": \"$HANDLER_USED\"," >> notification-data.json
+                echo "  \"deployment_status\": \"$DEPLOYMENT_STATUS\"," >> notification-data.json
+                echo "  \"test_status\": \"$TEST_STATUS\"," >> notification-data.json
+                echo "  \"resources\": {" >> notification-data.json
+                echo "    \"api_url\": \"$API_URL\"," >> notification-data.json
+                echo "    \"frontend_url\": \"$FRONTEND_URL\"," >> notification-data.json
+                echo "    \"s3_bucket\": \"$S3_BUCKET\"" >> notification-data.json
+                echo "  }," >> notification-data.json
+                echo "  \"stages_executed\": [" >> notification-data.json
+                echo "    \"CheckAPISync\"," >> notification-data.json
+                echo "    \"PrepareAPIIntegration\"," >> notification-data.json
+                echo "    \"ValidateInfrastructure\"," >> notification-data.json
+                echo "    \"DeployInfrastructure\"," >> notification-data.json
+                echo "    \"PostDeploymentTests\"" >> notification-data.json
+                echo "  ]," >> notification-data.json
+                echo "  \"stages_skipped\": []," >> notification-data.json
+                echo "  \"notification_type\": \"deployment_completion\"," >> notification-data.json
+                echo "  \"placeholder_artifact\": false" >> notification-data.json
+                echo "}" >> notification-data.json
             fi
             
             # Validate notification artifact structure
