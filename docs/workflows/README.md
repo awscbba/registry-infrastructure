@@ -45,7 +45,28 @@ This directory contains comprehensive CodeCatalyst workflows for the registry-in
 - 🧪 Integration testing across repositories
 - 📋 Deployment strategy determination
 
-### 3. Legacy Final Working Solution (`final-working-solution.yml`)
+### 3. Pull Request Validation Workflow
+
+**Purpose**: Fast validation of infrastructure changes in pull requests
+
+**Triggers**:
+- Pull request creation and updates targeting main branch
+
+**Actions**:
+1. **CheckAPISync**: API synchronization detection (always runs)
+2. **PrepareAPIIntegration**: API integration preparation (always runs)
+3. **ValidateInfrastructure**: Enhanced CDK synthesis and validation (always runs)
+4. **DeployInfrastructure**: Skipped in validation mode, creates placeholder artifacts
+5. **PostDeploymentTests**: Skipped in validation mode, creates placeholder test reports
+6. **NotifyDeploymentStatus**: Creates validation summary instead of deployment notification
+
+**Key Features**:
+- ⚡ Fast feedback (5-10 minutes vs 15-30 minutes for full deployment)
+- 🔍 Enhanced validation including CDK synthesis and IAM permission checks
+- 📦 Placeholder artifact generation for downstream compatibility
+- 🚫 No actual AWS deployment operations in validation mode
+
+### 4. Legacy Final Working Solution (`final-working-solution.yml`)
 
 **Purpose**: Legacy deployment workflow (manual trigger only)
 
@@ -277,4 +298,29 @@ After deployment, verify these endpoints:
 - Update documentation for new features
 - Verify backward compatibility
 
-This infrastructure provides a robust, coordinated deployment system that seamlessly integrates with the registry-api repository while maintaining flexibility and reliability.
+## Pull Request Validation
+
+### Validation Workflow
+
+The pull request validation workflow provides fast feedback on infrastructure changes:
+
+- **Execution Mode**: Validation mode for PRs, deployment mode for main branch
+- **Fast Feedback**: 5-10 minute validation vs 15-30 minute full deployment
+- **Enhanced Validation**: CDK synthesis, IAM permissions, resource configuration
+- **Artifact Compatibility**: Placeholder artifacts maintain downstream compatibility
+
+### Documentation
+
+- **[PR Validation Workflow](pr-validation-workflow.md)** - Complete workflow documentation
+- **[Troubleshooting Guide](pr-validation-troubleshooting.md)** - Common issues and solutions
+- **[Team Process](../team-processes/pr-validation-process.md)** - Team workflow guidelines
+
+### Usage
+
+1. **Create Pull Request**: Validation workflow triggers automatically
+2. **Monitor Status**: Check validation results in PR status checks
+3. **Fix Issues**: Address any validation failures
+4. **Code Review**: Proceed with review after validation passes
+5. **Merge**: Full deployment runs automatically on main branch
+
+This infrastructure provides a robust, coordinated deployment system that seamlessly integrates with the registry-api repository while maintaining flexibility and reliability, enhanced with fast pull request validation for improved developer experience.

@@ -11,7 +11,10 @@ docs/
 │   ├── README.md                      # CodeCatalyst workflows documentation
 │   ├── infrastructure-deployment.md   # Infrastructure deployment pipeline
 │   ├── deployment-coordination.md     # Cross-repository coordination
-│   └── troubleshooting.md            # Workflow troubleshooting guide
+│   ├── pr-validation-workflow.md      # Pull request validation workflow
+│   └── pr-validation-troubleshooting.md # PR validation troubleshooting guide
+├── team-processes/
+│   └── pr-validation-process.md        # Team PR validation guidelines
 ├── deployment/
 │   ├── coordination-guide.md          # Deployment coordination guide
 │   ├── rollback-procedures.md         # Emergency rollback procedures
@@ -26,9 +29,10 @@ docs/
 ## 🎯 Quick Start
 
 1. **New to the project?** Start with [workflows/README.md](workflows/README.md)
-2. **Deploying changes?** See [deployment/coordination-guide.md](deployment/coordination-guide.md)
-3. **Having issues?** Check [workflows/troubleshooting.md](workflows/troubleshooting.md)
-4. **Creating a PR?** Use [templates/pr-template.md](templates/pr-template.md)
+2. **Creating a PR?** See [workflows/pr-validation-workflow.md](workflows/pr-validation-workflow.md) and [team-processes/pr-validation-process.md](team-processes/pr-validation-process.md)
+3. **PR validation issues?** Check [workflows/pr-validation-troubleshooting.md](workflows/pr-validation-troubleshooting.md)
+4. **Deploying changes?** See [deployment/coordination-guide.md](deployment/coordination-guide.md)
+5. **Using PR template?** Use [templates/pr-template.md](templates/pr-template.md)
 
 ## 🔗 Related Documentation
 
