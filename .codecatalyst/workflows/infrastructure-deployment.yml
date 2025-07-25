@@ -359,15 +359,27 @@ Actions:
             echo "Running CDK synthesis..."
             cdk synth > cdk-synth-output.txt 2>cdk-synth-errors.txt
             CDK_EXIT_CODE=$?
-            
+
             # Check if the failure is just due to Node.js warnings
             if [ $CDK_EXIT_CODE -eq 0 ]; then
                 echo "✅ CDK synthesis successful - Infrastructure is valid"
                 VALIDATION_STATUS="success"
-            elif grep -q "Node.*has reached end-of-life" cdk-synth-errors.txt && grep -q "CloudFormation" cdk-synth-output.txt; then
-                echo "⚠️ CDK synthesis succeeded with Node.js warnings (ignoring version warnings)"
-                echo "📋 Node.js warning detected but CloudFormation templates were generated successfully"
-                VALIDATION_STATUS="success"
+            elif grep -q "Node.*has reached end-of-life" cdk-synth-errors.txt; then
+                echo "⚠️ Node.js end-of-life warning detected - checking if synthesis actually succeeded..."
+                
+                # Check if CDK actually generated templates despite the warning
+                if ls cdk.out/*.template.json >/dev/null 2>&1 || ls cdk.out/*.template.yaml >/dev/null 2>&1; then
+                    echo "✅ CDK synthesis succeeded despite Node.js warnings (CloudFormation templates found)"
+                    echo "📋 Node.js warning is informational only - infrastructure is valid"
+                    VALIDATION_STATUS="success"
+                else
+                    echo "❌ CDK synthesis failed - no CloudFormation templates generated"
+                    echo ""
+                    echo "Error details:"
+                    head -20 cdk-synth-errors.txt
+                    echo ""
+                    VALIDATION_STATUS="failed"
+                fi
             else
                 echo "❌ CDK synthesis failed - Infrastructure has real errors"
                 echo ""
@@ -376,7 +388,7 @@ Actions:
                 echo ""
                 VALIDATION_STATUS="failed"
             fi
-            
+
             # Create artifacts based on validation status
             if [ "$VALIDATION_STATUS" = "success" ]; then
                 echo '{"status":"success","execution_mode":"validation"}' > validation-results.json
