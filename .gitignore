@@ -169,3 +169,18 @@ yarn-error.log*
 
 # AWS CDK specific
 cdk.context.json
+
+# Workflow artifacts and temporary files
+execution-context.json
+execution-mode-env.sh
+validation-report.txt
+validation-results.json
+aws-identity.json
+cdk-synth-errors.txt
+iam-permissions-cache.json
+performance-profile.json
+pr-validation-test-report.txt
+=*
+*.test-report.txt
+*-cache.json
+*-errors.txt

@@ -1,6 +1,0 @@
-export EXECUTION_MODE="validation"
-export TRIGGER_TYPE="PULLREQUEST"
-export BRANCH_NAME="feature-test"
-export IS_MAIN_BRANCH="false"
-export SKIP_DEPLOYMENT="true"
-export SKIP_TESTING="true"
