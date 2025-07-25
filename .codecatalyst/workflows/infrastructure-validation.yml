@@ -7,14 +7,12 @@ Triggers:
     # Exclude main branch to avoid duplication with deployment workflow
     Branches:
       - feature\-.*  # Only features branches
-      - "!main"
   - Type: PULLREQUEST
     Branches:
       - main
     Events:
       - OPEN
       - REVISION
-  - Type: MANUAL
 
 Actions:
   CheckAPISync:
