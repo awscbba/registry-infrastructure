@@ -1020,8 +1020,8 @@ EOF
     Configuration:
       Steps:
         - Run: |
-            echo "🧪 Post-Deployment Testing"
-            echo "========================="
+            echo "🧪 Post-Deployment Testing Stage"
+            echo "================================="
             
             # Source execution mode environment variables
             source execution-mode-env.sh
@@ -1034,25 +1034,56 @@ EOF
             echo "  Skip Testing: $SKIP_TESTING"
             echo ""
             
+            echo "🎯 Stage Decision Logic:"
+            if [ "$SKIP_TESTING" = "true" ]; then
+                echo "  ⏭️ Testing will be SKIPPED (validation mode)"
+                echo "  📝 Placeholder artifacts will be created"
+                echo "  🔄 Reason: $EXECUTION_MODE mode detected"
+            else
+                echo "  ✅ Testing will be EXECUTED (deployment mode)"
+                echo "  🧪 Full post-deployment tests will run"
+                echo "  🔄 Reason: $EXECUTION_MODE mode detected"
+            fi
+            echo ""
+            
             # Check if testing should be skipped based on execution mode
             if [ "$SKIP_TESTING" = "true" ]; then
                 echo "ℹ️ Execution mode: $EXECUTION_MODE - skipping post-deployment tests"
                 echo "🔄 Trigger type: $TRIGGER_TYPE"
                 echo "🌿 Branch: $BRANCH_NAME"
+                echo ""
+                echo "📝 Creating placeholder test report for downstream compatibility..."
                 
-                # Create placeholder test report for downstream actions
+                # Create placeholder test report with same structure as actual report
                 echo "Post-Deployment Test Report" > post-deployment-test-report.txt
                 echo "==========================" >> post-deployment-test-report.txt
                 echo "Timestamp: $(date)" >> post-deployment-test-report.txt
                 echo "Execution Mode: $EXECUTION_MODE" >> post-deployment-test-report.txt
                 echo "Trigger Type: $TRIGGER_TYPE" >> post-deployment-test-report.txt
                 echo "Branch: $BRANCH_NAME" >> post-deployment-test-report.txt
-                echo "Status: SKIPPED (execution mode: $EXECUTION_MODE)" >> post-deployment-test-report.txt
+                echo "API URL: N/A (validation mode)" >> post-deployment-test-report.txt
+                echo "Deployment Type: N/A (validation mode)" >> post-deployment-test-report.txt
+                echo "Handler Used: N/A (validation mode)" >> post-deployment-test-report.txt
+                echo "Overall Status: SKIPPED" >> post-deployment-test-report.txt
+                echo "" >> post-deployment-test-report.txt
+                echo "Test Results:" >> post-deployment-test-report.txt
+                echo "- Health endpoint: SKIPPED (validation mode)" >> post-deployment-test-report.txt
+                echo "- People list: SKIPPED (validation mode)" >> post-deployment-test-report.txt
+                echo "- Person CRUD: SKIPPED (validation mode)" >> post-deployment-test-report.txt
                 echo "" >> post-deployment-test-report.txt
                 echo "ℹ️ Tests skipped for $EXECUTION_MODE mode" >> post-deployment-test-report.txt
                 echo "🔄 Trigger: $TRIGGER_TYPE" >> post-deployment-test-report.txt
+                echo "🌿 Branch: $BRANCH_NAME" >> post-deployment-test-report.txt
+                echo "" >> post-deployment-test-report.txt
+                echo "📋 Validation Mode Summary:" >> post-deployment-test-report.txt
+                echo "- Post-deployment tests are skipped in validation mode" >> post-deployment-test-report.txt
+                echo "- This placeholder report maintains artifact compatibility" >> post-deployment-test-report.txt
+                echo "- Actual testing occurs only on main branch deployments" >> post-deployment-test-report.txt
                 
-                echo "✅ Placeholder test report created for non-main branch"
+                echo "✅ Placeholder test report created successfully"
+                echo "📄 Report contents:"
+                cat post-deployment-test-report.txt
+                
                 exit 0
             fi
             
