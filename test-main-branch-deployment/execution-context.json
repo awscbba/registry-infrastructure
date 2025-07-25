@@ -1,0 +1,11 @@
+{
+  "execution_mode": "deployment",
+  "trigger_type": "PUSH",
+  "branch_name": "main",
+  "is_main_branch": true,
+  "skip_deployment": false,
+  "skip_testing": false,
+  "timestamp": "2025-07-25T11:29:24Z",
+  "commit_ref": "abc123def456",
+  "workflow_name": "Infrastructure_Deployment_Pipeline"
+}

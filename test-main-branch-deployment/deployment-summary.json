@@ -1,0 +1,25 @@
+{
+  "deployment_successful": true,
+  "deployment_type": "infrastructure_only",
+  "api_sync_detected": false,
+  "timestamp": "2025-07-25T11:29:24Z",
+  "execution_mode": "deployment",
+  "trigger_type": "PUSH",
+  "branch_name": "main",
+  "deployment_duration": "180s",
+  "outputs": {
+    "api_url": "https://api.example.com",
+    "frontend_url": "https://frontend.example.com",
+    "s3_bucket": "example-bucket"
+  },
+  "handler_used": "enhanced_api_handler",
+  "infrastructure_changes": "deployed",
+  "stack_status": "deployed",
+  "compatibility_mode": false,
+  "deployment_metadata": {
+    "cdk_version": "2.80.0",
+    "deployment_start": 1753442964,
+    "deployment_end": 1753443145,
+    "aws_region": "us-east-1"
+  }
+}

@@ -1,0 +1,5 @@
+API Integration Summary
+======================
+Timestamp: Fri Jul 25 07:29:24 -04 2025
+Deployment Type: infrastructure_only
+API Sync Detected: false

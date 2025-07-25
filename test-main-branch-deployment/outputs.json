@@ -1,0 +1,7 @@
+{
+  "PeopleRegisterInfrastructureStack": {
+    "ApiUrl": "https://api.example.com",
+    "FrontendUrl": "https://frontend.example.com",
+    "S3BucketName": "example-bucket"
+  }
+}

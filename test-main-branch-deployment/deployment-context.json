@@ -1,0 +1,12 @@
+{
+  "deployment_type": "infrastructure_only",
+  "timestamp": "2025-07-25T11:29:24Z",
+  "branch": "main",
+  "commit": "abc123def456",
+  "api_sync_detected": false,
+  "execution_mode": "deployment",
+  "trigger_type": "PUSH",
+  "is_main_branch": true,
+  "skip_deployment": false,
+  "skip_testing": false
+}

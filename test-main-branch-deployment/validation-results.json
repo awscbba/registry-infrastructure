@@ -1,0 +1,10 @@
+{
+  "status": "success",
+  "errors": 0,
+  "warnings": 1,
+  "timestamp": "2025-07-25T11:29:24Z",
+  "execution_mode": "deployment",
+  "cdk_synthesis": "success",
+  "iam_permissions": "validated",
+  "resource_configuration": "validated"
+}

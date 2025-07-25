@@ -1,0 +1,6 @@
+export EXECUTION_MODE="deployment"
+export TRIGGER_TYPE="PUSH"
+export BRANCH_NAME="main"
+export IS_MAIN_BRANCH="true"
+export SKIP_DEPLOYMENT="false"
+export SKIP_TESTING="false"

@@ -1,0 +1,21 @@
+🚀 FULL DEPLOYMENT EXECUTION
+============================
+This workflow is running in deployment mode, which means:
+
+✅ What WILL happen:
+  • Complete infrastructure validation
+  • CDK deployment to live AWS environment
+  • Resource creation and configuration
+  • Post-deployment testing against live APIs
+  • Comprehensive status notification
+
+🎯 Purpose:
+  • Deploy infrastructure changes to production
+  • Update live application environment
+  • Validate deployment with real traffic
+  • Ensure system health after changes
+
+⏱️ Expected duration: ~15-30 minutes (full deployment cycle)
+🔄 Trigger: PUSH on branch 'main'
+🏗️ Impact: Live infrastructure will be modified
+
