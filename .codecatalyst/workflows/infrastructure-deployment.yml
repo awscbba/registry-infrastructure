@@ -40,12 +40,24 @@ Actions:
             chmod +x scripts/execution-mode-detection.sh
             ./scripts/execution-mode-detection.sh
 
-            # Check if environment file was created
-            if [ -f "execution-mode-env.sh" ]; then
-                echo "✅ Environment file found, sourcing..."
-                source execution-mode-env.sh
+            # Check if environment file was created and source it safely
+            echo "🔍 Checking for environment file..."
+            ls -la execution-mode-env.sh 2>/dev/null || echo "File not found in directory listing"
+            
+            if [ -f "execution-mode-env.sh" ] && [ -r "execution-mode-env.sh" ]; then
+                echo "✅ Environment file found and readable, sourcing..."
+                cat execution-mode-env.sh
+                source execution-mode-env.sh || {
+                    echo "❌ Failed to source environment file, using defaults..."
+                    export EXECUTION_MODE="validation"
+                    export TRIGGER_TYPE="UNKNOWN"
+                    export BRANCH_NAME="unknown"
+                    export IS_MAIN_BRANCH="false"
+                    export SKIP_DEPLOYMENT="true"
+                    export SKIP_TESTING="true"
+                }
             else
-                echo "❌ Environment file not found, setting defaults..."
+                echo "❌ Environment file not found or not readable, setting defaults..."
                 export EXECUTION_MODE="validation"
                 export TRIGGER_TYPE="UNKNOWN"
                 export BRANCH_NAME="unknown"
@@ -53,6 +65,11 @@ Actions:
                 export SKIP_DEPLOYMENT="true"
                 export SKIP_TESTING="true"
             fi
+            
+            echo "🔧 Final environment variables:"
+            echo "  EXECUTION_MODE=$EXECUTION_MODE"
+            echo "  TRIGGER_TYPE=$TRIGGER_TYPE"
+            echo "  BRANCH_NAME=$BRANCH_NAME"
 
             # Source workflow logger for consistent logging
             chmod +x scripts/workflow-logger.sh
