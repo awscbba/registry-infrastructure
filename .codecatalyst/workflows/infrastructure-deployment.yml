@@ -341,62 +341,33 @@ Actions:
             echo "🎯 Mode: $EXECUTION_MODE (fast feedback for PR)"
             echo ""
 
-            # Essential validation only
-            echo "📦 Installing CDK..."
-            npm install -g aws-cdk@2.80.0 --silent
-
-            echo "🔄 CDK Synthesis..."
-            python3 -m venv .venv --quiet
+            # Minimal validation - just check if CDK code compiles
+            echo "� CDK aSynthesis Check..."
+            
+            # Install CDK and dependencies
+            npm install -g aws-cdk@2.80.0 > /dev/null 2>&1
+            python3 -m venv .venv > /dev/null 2>&1
             source .venv/bin/activate
-            pip install -r requirements.txt --quiet
+            pip install -r requirements.txt > /dev/null 2>&1
 
-            if cdk synth --quiet > /dev/null 2>&1; then
-                echo "✅ CDK synthesis successful"
+            # The only check that matters: Does CDK compile?
+            if cdk synth > /dev/null 2>&1; then
+                echo "✅ CDK synthesis successful - Infrastructure is valid"
                 
-                # Basic template analysis
-                if [ -f "cdk.out/PeopleRegisterInfrastructureStack.template.json" ]; then
-                    TEMPLATE_SIZE=$(wc -c < "cdk.out/PeopleRegisterInfrastructureStack.template.json")
-                    RESOURCE_COUNT=$(jq '.Resources | length' "cdk.out/PeopleRegisterInfrastructureStack.template.json" 2>/dev/null || echo "unknown")
-                    echo "📊 Template: ${TEMPLATE_SIZE} bytes, ${RESOURCE_COUNT} resources"
-                    
-                    if [ $TEMPLATE_SIZE -gt 51200 ]; then
-                        echo "⚠️ Template size exceeds 51KB (will use S3 upload)"
-                    fi
-                fi
-                
-                # Create success artifacts
-                echo '{"status":"success","timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","execution_mode":"validation"}' > validation-results.json
-                
-                # Create validation report
-                echo "Infrastructure Validation Report" > validation-report.txt
-                echo "===============================" >> validation-report.txt
-                echo "Timestamp: $(date)" >> validation-report.txt
-                echo "Execution Mode: validation" >> validation-report.txt
-                echo "CDK Synthesis: SUCCESS" >> validation-report.txt
-                echo "Template Size: ${TEMPLATE_SIZE} bytes" >> validation-report.txt
-                echo "Resource Count: ${RESOURCE_COUNT}" >> validation-report.txt
-                echo "Status: PASSED" >> validation-report.txt
-                
-                # Create CDK synth output file
-                echo '{"synthesis":"success","template_generated":true}' > cdk-synth-output.json
+                # Create minimal required artifacts
+                echo '{"status":"success","execution_mode":"validation"}' > validation-results.json
+                echo "CDK Synthesis: SUCCESS" > validation-report.txt
+                echo '{"synthesis":"success"}' > cdk-synth-output.json
                 touch cdk-synth-errors.txt
                 
-                echo "✅ Infrastructure validation completed successfully"
             else
-                echo "❌ CDK synthesis failed"
-                cdk synth 2>&1 | head -10 | tee cdk-synth-errors.txt
+                echo "❌ CDK synthesis failed - Infrastructure has errors"
                 
                 # Create failure artifacts
-                echo '{"status":"failed","timestamp":"'$(date -u +%Y-%m-%dT%H:%M:%SZ)'","execution_mode":"validation"}' > validation-results.json
-                
-                echo "Infrastructure Validation Report" > validation-report.txt
-                echo "===============================" >> validation-report.txt
-                echo "Timestamp: $(date)" >> validation-report.txt
-                echo "Execution Mode: validation" >> validation-report.txt
-                echo "CDK Synthesis: FAILED" >> validation-report.txt
-                echo "Status: FAILED" >> validation-report.txt
-                
-                echo '{"synthesis":"failed","error":"CDK synthesis failed"}' > cdk-synth-output.json
+                echo '{"status":"failed","execution_mode":"validation"}' > validation-results.json
+                echo "CDK Synthesis: FAILED" > validation-report.txt
+                echo '{"synthesis":"failed"}' > cdk-synth-output.json
+                cdk synth > cdk-synth-errors.txt 2>&1
                 
                 exit 1
             fi
