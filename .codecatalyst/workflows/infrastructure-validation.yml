@@ -3,7 +3,10 @@ SchemaVersion: "1.0"
 
 Triggers:
   - Type: PUSH
-    # Run on any branch push for fast feedback during development
+    # Run on feature branch pushes for fast feedback during development
+    # Exclude main branch to avoid duplication with deployment workflow
+    Branches:
+      - "!main"  # Exclude main branch
   - Type: PULLREQUEST
     Branches:
       - main
@@ -43,7 +46,8 @@ Actions:
             if [ "$TRIGGER_TYPE" = "PULLREQUEST" ]; then
                 echo "🎯 Mode: validation (PR to main)"
             else
-                echo "🎯 Mode: validation (branch push: $BRANCH_NAME)"
+                echo "🎯 Mode: validation (feature branch push: $BRANCH_NAME)"
+                echo "📋 Note: Main branch pushes use the deployment workflow instead"
             fi
 
             # Check for API sync
