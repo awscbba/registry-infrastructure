@@ -31,6 +31,9 @@ Actions:
         - Run: |
             echo "🔍 Checking API Code Synchronization"
             echo "==================================="
+            echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "🏷️ Stage: CheckAPISync (Always Executes)"
+            echo ""
             
             # Execute execution mode detection
             echo "🎯 Detecting execution mode..."
@@ -40,11 +43,25 @@ Actions:
             # Source the execution mode environment variables
             source execution-mode-env.sh
             
+            # Source workflow logger for consistent logging
+            chmod +x scripts/workflow-logger.sh
+            source scripts/workflow-logger.sh
+            
             echo ""
-            echo "📊 Execution Mode: $EXECUTION_MODE"
-            echo "🔄 Trigger Type: $TRIGGER_TYPE"
-            echo "🌿 Branch: $BRANCH_NAME"
+            echo "📊 Stage Execution Context:"
+            echo "  Execution Mode: $EXECUTION_MODE"
+            echo "  Trigger Type: $TRIGGER_TYPE"
+            echo "  Branch: $BRANCH_NAME"
+            echo "  Stage Decision: EXECUTE (CheckAPISync always runs in both modes)"
+            echo "  Stage Purpose: $([ "$EXECUTION_MODE" = "validation" ] && echo "Validate API sync for pull request feedback" || echo "Check API sync before deployment")"
             echo ""
+            
+            # Display mode-specific execution information
+            if [ "$EXECUTION_MODE" = "validation" ]; then
+                log_validation_only_message "$TRIGGER_TYPE" "$BRANCH_NAME"
+            else
+                log_deployment_mode_message "$TRIGGER_TYPE" "$BRANCH_NAME"
+            fi
             
             # Check if this deployment was triggered by API sync
             if [ -f "lambda/main.py" ] && [ -d "lambda/src" ]; then
@@ -89,6 +106,13 @@ Actions:
             echo "}" >> deployment-context.json
             
             cat deployment-context.json
+            echo ""
+            echo "📊 Stage Completion Summary:"
+            echo "  Stage: CheckAPISync"
+            echo "  Status: COMPLETED"
+            echo "  Execution Mode: $EXECUTION_MODE"
+            echo "  Next Stage: PrepareAPIIntegration (will execute)"
+            echo "  Duration: $(date -u +%Y-%m-%dT%H:%M:%SZ) (end time)"
             echo "✅ API sync check completed"
       Container:
         Registry: CODECATALYST
@@ -122,6 +146,9 @@ Actions:
         - Run: |
             echo "🔧 Preparing API Integration"
             echo "==========================="
+            echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "🏷️ Stage: PrepareAPIIntegration (Always Executes)"
+            echo ""
             
             # Source execution mode environment variables
             source execution-mode-env.sh
@@ -130,15 +157,19 @@ Actions:
             DEPLOYMENT_TYPE=$(jq -r '.deployment_type' deployment-context.json)
             API_SYNC_DETECTED=$(jq -r '.api_sync_detected' deployment-context.json)
             
-            echo "📊 Execution Context:"
-            echo "  Mode: $EXECUTION_MODE"
-            echo "  Trigger: $TRIGGER_TYPE"
+            echo "📊 Stage Execution Context:"
+            echo "  Execution Mode: $EXECUTION_MODE"
+            echo "  Trigger Type: $TRIGGER_TYPE"
             echo "  Branch: $BRANCH_NAME"
             echo "  Skip Deployment: $SKIP_DEPLOYMENT"
             echo "  Skip Testing: $SKIP_TESTING"
+            echo "  Stage Decision: EXECUTE (PrepareAPIIntegration always runs in both modes)"
+            echo "  Stage Purpose: $([ "$EXECUTION_MODE" = "validation" ] && echo "Prepare API integration for validation" || echo "Prepare API integration for deployment")"
             echo ""
-            echo "Deployment type: $DEPLOYMENT_TYPE"
-            echo "API sync detected: $API_SYNC_DETECTED"
+            echo "📋 Integration Context:"
+            echo "  Deployment type: $DEPLOYMENT_TYPE"
+            echo "  API sync detected: $API_SYNC_DETECTED"
+            echo ""
             
             if [ "$API_SYNC_DETECTED" = "true" ]; then
                 echo "🔄 Integrating synchronized API code with infrastructure"
@@ -242,6 +273,14 @@ Actions:
             echo "3. api_handler.py (legacy fallback)" >> api-integration-summary.txt
             
             cat api-integration-summary.txt
+            echo ""
+            echo "📊 Stage Completion Summary:"
+            echo "  Stage: PrepareAPIIntegration"
+            echo "  Status: COMPLETED"
+            echo "  Execution Mode: $EXECUTION_MODE"
+            echo "  Integration Type: $DEPLOYMENT_TYPE"
+            echo "  Next Stage: ValidateInfrastructure (will execute)"
+            echo "  Duration: $(date -u +%Y-%m-%dT%H:%M:%SZ) (end time)"
             echo "✅ API integration preparation completed"
       Container:
         Registry: CODECATALYST
@@ -275,16 +314,21 @@ Actions:
         - Run: |
             echo "🔍 Enhanced Infrastructure Validation"
             echo "===================================="
+            echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "🏷️ Stage: ValidateInfrastructure (Always Executes)"
+            echo ""
             
             # Source execution mode environment variables
             source execution-mode-env.sh
             
-            echo "📊 Execution Context:"
-            echo "  Mode: $EXECUTION_MODE"
-            echo "  Trigger: $TRIGGER_TYPE"
+            echo "📊 Stage Execution Context:"
+            echo "  Execution Mode: $EXECUTION_MODE"
+            echo "  Trigger Type: $TRIGGER_TYPE"
             echo "  Branch: $BRANCH_NAME"
             echo "  Skip Deployment: $SKIP_DEPLOYMENT"
             echo "  Skip Testing: $SKIP_TESTING"
+            echo "  Stage Decision: EXECUTE (ValidateInfrastructure always runs in both modes)"
+            echo "  Stage Purpose: $([ "$EXECUTION_MODE" = "validation" ] && echo "Validate infrastructure config for pull request feedback" || echo "Validate infrastructure before deployment")"
             echo ""
             
             # Initialize validation results
@@ -655,6 +699,15 @@ Actions:
             fi
             
             echo ""
+            echo "📊 Stage Completion Summary:"
+            echo "  Stage: ValidateInfrastructure"
+            echo "  Status: COMPLETED"
+            echo "  Execution Mode: $EXECUTION_MODE"
+            echo "  Validation Errors: $VALIDATION_ERRORS"
+            echo "  Validation Warnings: $VALIDATION_WARNINGS"
+            echo "  Next Stage: $([ "$SKIP_DEPLOYMENT" = "false" ] && echo "DeployInfrastructure (will execute)" || echo "DeployInfrastructure (will skip - placeholder artifacts)")"
+            echo "  Duration: $(date -u +%Y-%m-%dT%H:%M:%SZ) (end time)"
+            echo ""
             echo "📋 Full validation report saved to: $VALIDATION_REPORT"
             echo "📊 Validation results saved to: validation-results.json"
       Container:
@@ -692,16 +745,33 @@ Actions:
         - Run: |
             echo "🚀 Infrastructure Deployment Stage"
             echo "================================="
+            echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "🏷️ Stage: DeployInfrastructure (Conditional Execution)"
+            echo ""
             
             # Source execution mode environment variables
             source execution-mode-env.sh
             
-            echo "📊 Execution Context:"
-            echo "  Mode: $EXECUTION_MODE"
-            echo "  Trigger: $TRIGGER_TYPE"
+            echo "📊 Stage Execution Context:"
+            echo "  Execution Mode: $EXECUTION_MODE"
+            echo "  Trigger Type: $TRIGGER_TYPE"
             echo "  Branch: $BRANCH_NAME"
             echo "  Skip Deployment: $SKIP_DEPLOYMENT"
             echo "  Skip Testing: $SKIP_TESTING"
+            echo ""
+            
+            echo "🎯 Stage Decision Logic:"
+            if [ "$SKIP_DEPLOYMENT" = "true" ]; then
+                echo "  ⏭️ Deployment will be SKIPPED ($EXECUTION_MODE mode)"
+                echo "  📝 Reason: $EXECUTION_MODE mode does not deploy to live infrastructure"
+                echo "  🔧 Action: Create placeholder artifacts for downstream compatibility"
+                echo "  ⚡ Benefit: Fast feedback without infrastructure changes"
+            else
+                echo "  ✅ Deployment will be EXECUTED ($EXECUTION_MODE mode)"
+                echo "  📝 Reason: $EXECUTION_MODE mode deploys to live infrastructure"
+                echo "  🔧 Action: Execute CDK deployment to AWS"
+                echo "  🏗️ Impact: Live infrastructure changes will be applied"
+            fi
             echo ""
             
             # Read deployment context for consistent artifact creation
@@ -719,10 +789,12 @@ Actions:
             if [ "$SKIP_DEPLOYMENT" = "true" ]; then
                 echo "🔍 VALIDATION MODE - Creating placeholder artifacts"
                 echo "=================================================="
-                echo "ℹ️ Execution mode: $EXECUTION_MODE"
-                echo "🔄 Trigger type: $TRIGGER_TYPE"
-                echo "🌿 Branch: $BRANCH_NAME"
-                echo "⏭️ Skipping actual infrastructure deployment"
+                echo "📊 Stage Execution Decision: SKIP DEPLOYMENT"
+                echo "  Execution mode: $EXECUTION_MODE"
+                echo "  Trigger type: $TRIGGER_TYPE"
+                echo "  Branch: $BRANCH_NAME"
+                echo "  Rationale: Validation mode preserves live infrastructure"
+                echo "  Action: Creating placeholder artifacts for downstream stages"
                 echo ""
                 
                 # Use artifact handler to create structured placeholder artifacts
@@ -753,6 +825,15 @@ Actions:
                 fi
                 
                 echo "✅ Placeholder artifacts created successfully"
+                echo ""
+                echo "📊 Stage Completion Summary (Validation Mode):"
+                echo "  Stage: DeployInfrastructure"
+                echo "  Status: SKIPPED (placeholder artifacts created)"
+                echo "  Execution Mode: $EXECUTION_MODE"
+                echo "  Infrastructure Changes: None (validation mode)"
+                echo "  Next Stage: PostDeploymentTests (will skip - placeholder artifacts)"
+                echo "  Duration: $(date -u +%Y-%m-%dT%H:%M:%SZ) (end time)"
+                echo ""
                 echo "📊 Deployment Summary (Validation Mode):"
                 cat deployment-summary.json | jq '.' 2>/dev/null || cat deployment-summary.json
                 echo ""
@@ -762,10 +843,12 @@ Actions:
             
             echo "🏗️ DEPLOYMENT MODE - Executing actual infrastructure deployment"
             echo "=============================================================="
-            echo "✅ Execution mode: $EXECUTION_MODE"
-            echo "🔄 Trigger type: $TRIGGER_TYPE"
-            echo "🌿 Branch: $BRANCH_NAME"
-            echo "🚀 Proceeding with actual infrastructure deployment"
+            echo "📊 Stage Execution Decision: EXECUTE DEPLOYMENT"
+            echo "  Execution mode: $EXECUTION_MODE"
+            echo "  Trigger type: $TRIGGER_TYPE"
+            echo "  Branch: $BRANCH_NAME"
+            echo "  Rationale: Deployment mode applies changes to live infrastructure"
+            echo "  Action: Executing CDK deployment to AWS"
             echo ""
             
             # Setup Python environment for deployment
@@ -873,6 +956,16 @@ Actions:
 EOF
                     
                     echo "✅ Deployment summary created"
+                    echo ""
+                    echo "📊 Stage Completion Summary (Deployment Mode):"
+                    echo "  Stage: DeployInfrastructure"
+                    echo "  Status: COMPLETED (infrastructure deployed)"
+                    echo "  Execution Mode: $EXECUTION_MODE"
+                    echo "  Infrastructure Changes: Applied to live environment"
+                    echo "  Deployment Duration: ${DEPLOYMENT_DURATION}s"
+                    echo "  Next Stage: PostDeploymentTests (will execute)"
+                    echo "  Duration: $(date -u +%Y-%m-%dT%H:%M:%SZ) (end time)"
+                    echo ""
                     echo "📊 Final Deployment Summary:"
                     cat deployment-summary.json | jq '.' 2>/dev/null || cat deployment-summary.json
                     echo ""
@@ -972,13 +1065,16 @@ EOF
         - Run: |
             echo "🧪 Post-Deployment Testing Stage"
             echo "================================="
+            echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "🏷️ Stage: PostDeploymentTests (Conditional Execution)"
+            echo ""
             
             # Source execution mode environment variables
             source execution-mode-env.sh
             
-            echo "📊 Execution Context:"
-            echo "  Mode: $EXECUTION_MODE"
-            echo "  Trigger: $TRIGGER_TYPE"
+            echo "📊 Stage Execution Context:"
+            echo "  Execution Mode: $EXECUTION_MODE"
+            echo "  Trigger Type: $TRIGGER_TYPE"
             echo "  Branch: $BRANCH_NAME"
             echo "  Skip Deployment: $SKIP_DEPLOYMENT"
             echo "  Skip Testing: $SKIP_TESTING"
@@ -986,23 +1082,27 @@ EOF
             
             echo "🎯 Stage Decision Logic:"
             if [ "$SKIP_TESTING" = "true" ]; then
-                echo "  ⏭️ Testing will be SKIPPED (validation mode)"
-                echo "  Placeholder artifacts will be created"
-                echo "  🔄 Reason: $EXECUTION_MODE mode detected"
+                echo "  ⏭️ Testing will be SKIPPED ($EXECUTION_MODE mode)"
+                echo "  📝 Reason: $EXECUTION_MODE mode has no live infrastructure to test"
+                echo "  🔧 Action: Create placeholder test report for downstream compatibility"
+                echo "  ⚡ Benefit: Fast feedback without requiring live environment"
             else
-                echo "  ✅ Testing will be EXECUTED (deployment mode)"
-                echo "  🧪 Full post-deployment tests will run"
-                echo "  🔄 Reason: $EXECUTION_MODE mode detected"
+                echo "  ✅ Testing will be EXECUTED ($EXECUTION_MODE mode)"
+                echo "  📝 Reason: $EXECUTION_MODE mode has live infrastructure to validate"
+                echo "  🔧 Action: Run comprehensive post-deployment tests"
+                echo "  🧪 Impact: Validate live application functionality"
             fi
             echo ""
             
             # Check if testing should be skipped based on execution mode
             if [ "$SKIP_TESTING" = "true" ]; then
-                echo "ℹ️ Execution mode: $EXECUTION_MODE - skipping post-deployment tests"
-                echo "🔄 Trigger type: $TRIGGER_TYPE"
-                echo "🌿 Branch: $BRANCH_NAME"
+                echo "📊 Stage Execution Decision: SKIP TESTING"
+                echo "  Execution mode: $EXECUTION_MODE"
+                echo "  Trigger type: $TRIGGER_TYPE"
+                echo "  Branch: $BRANCH_NAME"
+                echo "  Rationale: No live infrastructure deployed to test"
+                echo "  Action: Creating placeholder test report for downstream stages"
                 echo ""
-                echo "🔧 Using artifact handler to create placeholder test report..."
                 
                 # Make artifact handler executable
                 chmod +x scripts/artifact-handler.sh
@@ -1030,6 +1130,15 @@ EOF
                     echo "⚠️ Test report consumption test failed - downstream stages may have issues"
                 fi
                 
+                echo ""
+                echo "📊 Stage Completion Summary (Validation Mode):"
+                echo "  Stage: PostDeploymentTests"
+                echo "  Status: SKIPPED (placeholder artifacts created)"
+                echo "  Execution Mode: $EXECUTION_MODE"
+                echo "  Testing: None (no live infrastructure to test)"
+                echo "  Next Stage: NotifyDeploymentStatus (will execute)"
+                echo "  Duration: $(date -u +%Y-%m-%dT%H:%M:%SZ) (end time)"
+                echo ""
                 echo "📄 Generated test report contents:"
                 cat post-deployment-test-report.txt
                 
@@ -1178,6 +1287,17 @@ EOF
             
             cat post-deployment-test-report.txt
             
+            echo ""
+            echo "📊 Stage Completion Summary (Deployment Mode):"
+            echo "  Stage: PostDeploymentTests"
+            echo "  Status: $([ "$TESTS_PASSED" = true ] && echo "COMPLETED (tests passed)" || echo "COMPLETED (tests failed)")"
+            echo "  Execution Mode: $EXECUTION_MODE"
+            echo "  Testing: Live infrastructure validated"
+            echo "  Test Results: $([ "$TESTS_PASSED" = true ] && echo "PASSED" || echo "FAILED")"
+            echo "  Next Stage: NotifyDeploymentStatus (will execute)"
+            echo "  Duration: $(date -u +%Y-%m-%dT%H:%M:%SZ) (end time)"
+            echo ""
+            
             if [ "$TESTS_PASSED" = true ]; then
                 echo "🎉 Post-deployment tests passed!"
                 exit 0
@@ -1216,16 +1336,21 @@ EOF
         - Run: |
             echo "📢 Deployment Status Notification"
             echo "================================"
+            echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo "🏷️ Stage: NotifyDeploymentStatus (Always Executes)"
+            echo ""
             
             # Source execution mode environment variables
             source execution-mode-env.sh
             
-            echo "📊 Execution Context:"
-            echo "  Mode: $EXECUTION_MODE"
-            echo "  Trigger: $TRIGGER_TYPE"
+            echo "📊 Stage Execution Context:"
+            echo "  Execution Mode: $EXECUTION_MODE"
+            echo "  Trigger Type: $TRIGGER_TYPE"
             echo "  Branch: $BRANCH_NAME"
             echo "  Skip Deployment: $SKIP_DEPLOYMENT"
             echo "  Skip Testing: $SKIP_TESTING"
+            echo "  Stage Decision: EXECUTE (NotifyDeploymentStatus always runs with mode-specific notifications)"
+            echo "  Stage Purpose: $([ "$EXECUTION_MODE" = "validation" ] && echo "Create validation summary notification" || echo "Create deployment completion notification")"
             echo ""
             
             # Initialize notification variables
@@ -1405,10 +1530,32 @@ EOF
             # - AWS SNS topics
             
             echo ""
+            echo "📊 Stage Completion Summary:"
+            echo "  Stage: NotifyDeploymentStatus"
+            echo "  Status: COMPLETED"
+            echo "  Execution Mode: $EXECUTION_MODE"
+            echo "  Notification Type: $([ "$EXECUTION_MODE" = "validation" ] && echo "Validation Summary" || echo "Deployment Completion")"
+            echo "  Workflow Status: $([ "$EXECUTION_MODE" = "validation" ] && echo "Validation completed" || echo "Deployment completed")"
+            echo "  Duration: $(date -u +%Y-%m-%dT%H:%M:%SZ) (end time)"
+            echo ""
+            
+            echo "🎯 WORKFLOW COMPLETION SUMMARY:"
+            echo "==============================="
+            echo "  Execution Mode: $EXECUTION_MODE"
+            echo "  Trigger Type: $TRIGGER_TYPE"
+            echo "  Branch: $BRANCH_NAME"
+            echo "  Stages Executed: $([ "$EXECUTION_MODE" = "validation" ] && echo "CheckAPISync, PrepareAPIIntegration, ValidateInfrastructure, NotifyDeploymentStatus" || echo "All stages")"
+            echo "  Stages Skipped: $([ "$EXECUTION_MODE" = "validation" ] && echo "DeployInfrastructure (placeholder), PostDeploymentTests (placeholder)" || echo "None")"
+            echo "  Infrastructure Changes: $([ "$EXECUTION_MODE" = "validation" ] && echo "None (validation mode)" || echo "Applied to live environment")"
+            echo "  Outcome: $([ "$EXECUTION_MODE" = "validation" ] && echo "Pull request validation feedback provided" || echo "Live application deployed and tested")"
+            echo ""
+            
             if [ "$EXECUTION_MODE" = "validation" ]; then
                 echo "✅ Validation notification completed successfully"
+                echo "🔍 Pull request validation workflow completed - ready for code review"
             else
                 echo "✅ Deployment notification completed successfully"
+                echo "🚀 Full deployment workflow completed - application is live"
             fi
       Container:
         Registry: CODECATALYST
