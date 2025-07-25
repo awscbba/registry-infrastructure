@@ -6,7 +6,8 @@ Triggers:
     # Run on feature branch pushes for fast feedback during development
     # Exclude main branch to avoid duplication with deployment workflow
     Branches:
-      - "!main"  # Exclude main branch
+      - feature\-.*  # Only features branches
+      - !main
   - Type: PULLREQUEST
     Branches:
       - main
