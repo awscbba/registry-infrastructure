@@ -1,8 +1,7 @@
-Name: Legacy_Final_Working_Solution
+Name: Legacy_Final_Working_Solution_DISABLED
 SchemaVersion: "1.0"
 
-Triggers:
-  - Type: MANUAL
+Triggers: []
 
 Actions:
   DeployAndTest:
