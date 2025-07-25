@@ -860,30 +860,30 @@ Actions:
                     
                     # Create comprehensive deployment summary
                     echo "Creating deployment summary..."
-                    cat > deployment-summary.json << EOF
+                    cat > deployment-summary.json << 'EOF'
 {
   "deployment_successful": true,
-  "deployment_type": "$DEPLOYMENT_TYPE",
-  "api_sync_detected": "$API_SYNC_DETECTED",
-  "timestamp": "$TIMESTAMP",
-  "execution_mode": "$EXECUTION_MODE",
-  "trigger_type": "$TRIGGER_TYPE",
-  "branch_name": "$BRANCH_NAME",
-  "deployment_duration": "${DEPLOYMENT_DURATION}s",
+  "deployment_type": "'$DEPLOYMENT_TYPE'",
+  "api_sync_detected": "'$API_SYNC_DETECTED'",
+  "timestamp": "'$TIMESTAMP'",
+  "execution_mode": "'$EXECUTION_MODE'",
+  "trigger_type": "'$TRIGGER_TYPE'",
+  "branch_name": "'$BRANCH_NAME'",
+  "deployment_duration": "'${DEPLOYMENT_DURATION}s'",
   "outputs": {
-    "api_url": "$API_URL",
-    "frontend_url": "$FRONTEND_URL",
-    "s3_bucket": "$S3_BUCKET"
+    "api_url": "'$API_URL'",
+    "frontend_url": "'$FRONTEND_URL'",
+    "s3_bucket": "'$S3_BUCKET'"
   },
-  "handler_used": "$HANDLER_USED",
+  "handler_used": "'$HANDLER_USED'",
   "infrastructure_changes": "deployed",
   "stack_status": "deployed",
   "compatibility_mode": false,
   "deployment_metadata": {
     "cdk_version": "2.80.0",
-    "deployment_start": "$DEPLOYMENT_START",
-    "deployment_end": "$DEPLOYMENT_END",
-    "aws_region": "${AWS_DEFAULT_REGION:-us-east-1}"
+    "deployment_start": "'$DEPLOYMENT_START'",
+    "deployment_end": "'$DEPLOYMENT_END'",
+    "aws_region": "'${AWS_DEFAULT_REGION:-us-east-1}'"
   }
 }
 EOF
@@ -909,15 +909,15 @@ EOF
                     echo "🔍 Checking for CDK deployment issues..."
                     
                     # Create error summary
-                    cat > deployment-summary.json << EOF
+                    cat > deployment-summary.json << 'EOF'
 {
   "deployment_successful": false,
-  "deployment_type": "$DEPLOYMENT_TYPE",
-  "api_sync_detected": "$API_SYNC_DETECTED",
-  "timestamp": "$TIMESTAMP",
-  "execution_mode": "$EXECUTION_MODE",
-  "trigger_type": "$TRIGGER_TYPE",
-  "branch_name": "$BRANCH_NAME",
+  "deployment_type": "'$DEPLOYMENT_TYPE'",
+  "api_sync_detected": "'$API_SYNC_DETECTED'",
+  "timestamp": "'$TIMESTAMP'",
+  "execution_mode": "'$EXECUTION_MODE'",
+  "trigger_type": "'$TRIGGER_TYPE'",
+  "branch_name": "'$BRANCH_NAME'",
   "error": "Deployment outputs not available",
   "outputs": {
     "api_url": "deployment_failed",
@@ -939,15 +939,15 @@ EOF
                 tail -20 deployment.log 2>/dev/null || echo "No deployment log available"
                 
                 # Create failure summary
-                cat > deployment-summary.json << EOF
+                cat > deployment-summary.json << 'EOF'
 {
   "deployment_successful": false,
-  "deployment_type": "$DEPLOYMENT_TYPE",
-  "api_sync_detected": "$API_SYNC_DETECTED",
-  "timestamp": "$TIMESTAMP",
-  "execution_mode": "$EXECUTION_MODE",
-  "trigger_type": "$TRIGGER_TYPE",
-  "branch_name": "$BRANCH_NAME",
+  "deployment_type": "'$DEPLOYMENT_TYPE'",
+  "api_sync_detected": "'$API_SYNC_DETECTED'",
+  "timestamp": "'$TIMESTAMP'",
+  "execution_mode": "'$EXECUTION_MODE'",
+  "trigger_type": "'$TRIGGER_TYPE'",
+  "branch_name": "'$BRANCH_NAME'",
   "error": "CDK deployment failed",
   "outputs": {
     "api_url": "deployment_failed",
@@ -1394,22 +1394,22 @@ $([ "$TEST_STATUS" = "failed" ] && echo "  5. ⚠️ Review and address failed t
 EOF
                 
                 # Update notification-data.json with real deployment data
-                cat > notification-data.json << EOF
+                cat > notification-data.json << 'EOF'
 {
-  "timestamp": "$TIMESTAMP",
-  "execution_mode": "$EXECUTION_MODE",
-  "trigger_type": "$TRIGGER_TYPE",
-  "branch_name": "$BRANCH_NAME",
-  "commit_ref": "$COMMIT_REF",
-  "workflow_name": "$WORKFLOW_NAME",
-  "deployment_type": "$DEPLOYMENT_TYPE",
-  "handler_used": "$HANDLER_USED",
-  "deployment_status": "$DEPLOYMENT_STATUS",
-  "test_status": "$TEST_STATUS",
+  "timestamp": "'$TIMESTAMP'",
+  "execution_mode": "'$EXECUTION_MODE'",
+  "trigger_type": "'$TRIGGER_TYPE'",
+  "branch_name": "'$BRANCH_NAME'",
+  "commit_ref": "'$COMMIT_REF'",
+  "workflow_name": "'$WORKFLOW_NAME'",
+  "deployment_type": "'$DEPLOYMENT_TYPE'",
+  "handler_used": "'$HANDLER_USED'",
+  "deployment_status": "'$DEPLOYMENT_STATUS'",
+  "test_status": "'$TEST_STATUS'",
   "resources": {
-    "api_url": "$API_URL",
-    "frontend_url": "$FRONTEND_URL",
-    "s3_bucket": "$S3_BUCKET"
+    "api_url": "'$API_URL'",
+    "frontend_url": "'$FRONTEND_URL'",
+    "s3_bucket": "'$S3_BUCKET'"
   },
   "stages_executed": [
     "CheckAPISync",
