@@ -344,11 +344,15 @@ Actions:
             # Minimal validation - just check if CDK code compiles
             echo "� CDK aSynthesis Check..."
 
-            # Install CDK and dependencies (use version compatible with Node 18)
-            npm install -g aws-cdk@2.70.0 > /dev/null 2>&1
+            # Install CDK and dependencies (use older version that supports Node 18)
+            npm install -g aws-cdk@2.60.0 > /dev/null 2>&1
             python3 -m venv .venv > /dev/null 2>&1
             source .venv/bin/activate
             pip install -r requirements.txt > /dev/null 2>&1
+
+            # Suppress Node.js end-of-life warnings for CDK
+            export CDK_DISABLE_VERSION_CHECK=1
+            export NODE_NO_WARNINGS=1
 
             # The only check that matters: Does CDK compile?
             if cdk synth > /dev/null 2>&1; then
