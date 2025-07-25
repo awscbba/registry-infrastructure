@@ -3,10 +3,10 @@ SchemaVersion: "1.0"
 
 Triggers:
   - Type: PUSH
-    # Run on feature branches for fast feedback during development
-    # Try pattern without quotes
+    # For now, explicitly list the current feature branch
+    # TODO: Find the correct pattern syntax for feature branches
     Branches:
-      - feature/*
+      - feature/person-crud-completion
   - Type: PULLREQUEST
     Branches:
       - main
