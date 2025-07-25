@@ -40,8 +40,19 @@ Actions:
             chmod +x scripts/execution-mode-detection.sh
             ./scripts/execution-mode-detection.sh
 
-            # Source the execution mode environment variables
-            source execution-mode-env.sh
+            # Check if environment file was created
+            if [ -f "execution-mode-env.sh" ]; then
+                echo "✅ Environment file found, sourcing..."
+                source execution-mode-env.sh
+            else
+                echo "❌ Environment file not found, setting defaults..."
+                export EXECUTION_MODE="validation"
+                export TRIGGER_TYPE="UNKNOWN"
+                export BRANCH_NAME="unknown"
+                export IS_MAIN_BRANCH="false"
+                export SKIP_DEPLOYMENT="true"
+                export SKIP_TESTING="true"
+            fi
 
             # Source workflow logger for consistent logging
             chmod +x scripts/workflow-logger.sh
