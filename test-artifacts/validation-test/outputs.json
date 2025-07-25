@@ -1,0 +1,11 @@
+{
+  "PeopleRegisterInfrastructureStack": {
+    "ApiUrl": "https://validation-placeholder.example.com/api",
+    "FrontendUrl": "https://validation-placeholder.example.com",
+    "S3BucketName": "validation-placeholder-bucket",
+    "ValidationMode": true,
+    "ExecutionMode": "validation",
+    "TriggerType": "PULLREQUEST",
+    "PlaceholderArtifact": true
+  }
+}

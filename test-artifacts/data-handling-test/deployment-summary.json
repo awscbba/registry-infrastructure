@@ -1,0 +1,25 @@
+{
+  "deployment_successful": false,
+  "deployment_type": "validation_placeholder",
+  "api_sync_detected": false,
+  "timestamp": "2025-07-25T03:54:32Z",
+  "execution_mode": "validation",
+  "trigger_type": "PULLREQUEST",
+  "branch_name": "feature-branch",
+  "skip_reason": "Validation mode - deployment skipped for PULLREQUEST trigger",
+  "validation_status": "unknown",
+  "outputs": {
+    "api_url": "https://validation-placeholder.example.com/api",
+    "frontend_url": "https://validation-placeholder.example.com",
+    "s3_bucket": "validation-placeholder-bucket"
+  },
+  "handler_used": "validation_placeholder",
+  "infrastructure_changes": "none",
+  "deployment_duration": "0s",
+  "resources_created": 0,
+  "resources_updated": 0,
+  "resources_deleted": 0,
+  "stack_status": "validation_only",
+  "compatibility_mode": true,
+  "placeholder_artifact": true
+}

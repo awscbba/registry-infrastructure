@@ -725,82 +725,32 @@ Actions:
                 echo "⏭️ Skipping actual infrastructure deployment"
                 echo ""
                 
-                # Read validation results to include in placeholder
-                VALIDATION_STATUS="unknown"
-                if [ -f "validation-results.json" ]; then
-                    VALIDATION_STATUS=$(jq -r '.status // "unknown"' validation-results.json 2>/dev/null || echo "unknown")
-                    echo "📊 Validation Status: $VALIDATION_STATUS"
+                # Use artifact handler to create structured placeholder artifacts
+                echo "🔧 Using artifact handler to create placeholder artifacts..."
+                chmod +x scripts/artifact-handler.sh
+                
+                # Create placeholder deployment summary with proper structure
+                if ./scripts/artifact-handler.sh create-placeholder deploymentSummary "$EXECUTION_MODE" "$TRIGGER_TYPE" "$BRANCH_NAME" "."; then
+                    echo "✅ Placeholder deployment summary created successfully"
+                else
+                    echo "❌ Failed to create placeholder deployment summary"
+                    exit 1
                 fi
                 
-                # Create comprehensive placeholder deployment summary
-                echo "📝 Creating placeholder deployment summary..."
-                cat > deployment-summary.json << EOF
-{
-  "deployment_successful": false,
-  "deployment_type": "validation_placeholder",
-  "api_sync_detected": $API_SYNC_DETECTED,
-  "timestamp": "$TIMESTAMP",
-  "execution_mode": "$EXECUTION_MODE",
-  "trigger_type": "$TRIGGER_TYPE",
-  "branch_name": "$BRANCH_NAME",
-  "skip_reason": "Validation mode - deployment skipped for $TRIGGER_TYPE trigger",
-  "validation_status": "$VALIDATION_STATUS",
-  "outputs": {
-    "api_url": "https://validation-placeholder.example.com/api",
-    "frontend_url": "https://validation-placeholder.example.com",
-    "s3_bucket": "validation-placeholder-bucket"
-  },
-  "handler_used": "validation_placeholder",
-  "infrastructure_changes": "none",
-  "deployment_duration": "0s",
-  "resources_created": 0,
-  "resources_updated": 0,
-  "resources_deleted": 0,
-  "stack_status": "validation_only",
-  "compatibility_mode": true
-}
-EOF
+                # Validate artifact structure
+                if ./scripts/artifact-handler.sh validate deploymentSummary "."; then
+                    echo "✅ Artifact structure validation passed"
+                else
+                    echo "⚠️ Artifact structure validation failed - continuing with available artifacts"
+                fi
                 
-                # Create placeholder outputs.json with consistent structure
-                echo "📝 Creating placeholder outputs..."
-                cat > outputs.json << EOF
-{
-  "PeopleRegisterInfrastructureStack": {
-    "ApiUrl": "https://validation-placeholder.example.com/api",
-    "FrontendUrl": "https://validation-placeholder.example.com",
-    "S3BucketName": "validation-placeholder-bucket",
-    "ValidationMode": true,
-    "ExecutionMode": "$EXECUTION_MODE",
-    "TriggerType": "$TRIGGER_TYPE"
-  }
-}
-EOF
-                
-                # Create deployment log for consistency
-                echo "📝 Creating deployment log..."
-                cat > deployment.log << EOF
-Infrastructure Deployment Log - Validation Mode
-==============================================
-Timestamp: $TIMESTAMP
-Execution Mode: $EXECUTION_MODE
-Trigger Type: $TRIGGER_TYPE
-Branch: $BRANCH_NAME
-
-VALIDATION MODE ACTIVE
-=====================
-- Actual deployment skipped
-- Placeholder artifacts created
-- Validation status: $VALIDATION_STATUS
-- API sync detected: $API_SYNC_DETECTED
-- Deployment type: $DEPLOYMENT_TYPE
-
-Placeholder Resources Created:
-- API URL: https://validation-placeholder.example.com/api
-- Frontend URL: https://validation-placeholder.example.com
-- S3 Bucket: validation-placeholder-bucket
-
-Status: Validation mode completed successfully
-EOF
+                # Test artifact consumption compatibility
+                echo "🧪 Testing artifact consumption compatibility..."
+                if ./scripts/artifact-handler.sh test-consumption deploymentSummary "."; then
+                    echo "✅ Artifact consumption test passed"
+                else
+                    echo "⚠️ Artifact consumption test failed - downstream stages may have issues"
+                fi
                 
                 echo "✅ Placeholder artifacts created successfully"
                 echo "📊 Deployment Summary (Validation Mode):"
@@ -893,7 +843,7 @@ EOF
                     HANDLER_USED=$([ "$API_SYNC_DETECTED" = "true" ] && echo "integrated_api_handler" || echo "enhanced_api_handler")
                     
                     # Create comprehensive deployment summary
-                    echo "📝 Creating deployment summary..."
+                    echo "Creating deployment summary..."
                     cat > deployment-summary.json << EOF
 {
   "deployment_successful": true,
@@ -1037,7 +987,7 @@ EOF
             echo "🎯 Stage Decision Logic:"
             if [ "$SKIP_TESTING" = "true" ]; then
                 echo "  ⏭️ Testing will be SKIPPED (validation mode)"
-                echo "  📝 Placeholder artifacts will be created"
+                echo "  Placeholder artifacts will be created"
                 echo "  🔄 Reason: $EXECUTION_MODE mode detected"
             else
                 echo "  ✅ Testing will be EXECUTED (deployment mode)"
@@ -1052,36 +1002,35 @@ EOF
                 echo "🔄 Trigger type: $TRIGGER_TYPE"
                 echo "🌿 Branch: $BRANCH_NAME"
                 echo ""
-                echo "📝 Creating placeholder test report for downstream compatibility..."
+                echo "🔧 Using artifact handler to create placeholder test report..."
                 
-                # Create placeholder test report with same structure as actual report
-                echo "Post-Deployment Test Report" > post-deployment-test-report.txt
-                echo "==========================" >> post-deployment-test-report.txt
-                echo "Timestamp: $(date)" >> post-deployment-test-report.txt
-                echo "Execution Mode: $EXECUTION_MODE" >> post-deployment-test-report.txt
-                echo "Trigger Type: $TRIGGER_TYPE" >> post-deployment-test-report.txt
-                echo "Branch: $BRANCH_NAME" >> post-deployment-test-report.txt
-                echo "API URL: N/A (validation mode)" >> post-deployment-test-report.txt
-                echo "Deployment Type: N/A (validation mode)" >> post-deployment-test-report.txt
-                echo "Handler Used: N/A (validation mode)" >> post-deployment-test-report.txt
-                echo "Overall Status: SKIPPED" >> post-deployment-test-report.txt
-                echo "" >> post-deployment-test-report.txt
-                echo "Test Results:" >> post-deployment-test-report.txt
-                echo "- Health endpoint: SKIPPED (validation mode)" >> post-deployment-test-report.txt
-                echo "- People list: SKIPPED (validation mode)" >> post-deployment-test-report.txt
-                echo "- Person CRUD: SKIPPED (validation mode)" >> post-deployment-test-report.txt
-                echo "" >> post-deployment-test-report.txt
-                echo "ℹ️ Tests skipped for $EXECUTION_MODE mode" >> post-deployment-test-report.txt
-                echo "🔄 Trigger: $TRIGGER_TYPE" >> post-deployment-test-report.txt
-                echo "🌿 Branch: $BRANCH_NAME" >> post-deployment-test-report.txt
-                echo "" >> post-deployment-test-report.txt
-                echo "📋 Validation Mode Summary:" >> post-deployment-test-report.txt
-                echo "- Post-deployment tests are skipped in validation mode" >> post-deployment-test-report.txt
-                echo "- This placeholder report maintains artifact compatibility" >> post-deployment-test-report.txt
-                echo "- Actual testing occurs only on main branch deployments" >> post-deployment-test-report.txt
+                # Make artifact handler executable
+                chmod +x scripts/artifact-handler.sh
                 
-                echo "✅ Placeholder test report created successfully"
-                echo "📄 Report contents:"
+                # Create placeholder test report with proper structure
+                if ./scripts/artifact-handler.sh create-placeholder testReport "$EXECUTION_MODE" "$TRIGGER_TYPE" "$BRANCH_NAME" "."; then
+                    echo "✅ Placeholder test report created successfully"
+                else
+                    echo "❌ Failed to create placeholder test report"
+                    exit 1
+                fi
+                
+                # Validate artifact structure
+                if ./scripts/artifact-handler.sh validate testReport "."; then
+                    echo "✅ Test report artifact structure validation passed"
+                else
+                    echo "⚠️ Test report artifact structure validation failed - continuing with available artifacts"
+                fi
+                
+                # Test artifact consumption compatibility
+                echo "🧪 Testing test report consumption compatibility..."
+                if ./scripts/artifact-handler.sh test-consumption testReport "."; then
+                    echo "✅ Test report consumption test passed"
+                else
+                    echo "⚠️ Test report consumption test failed - downstream stages may have issues"
+                fi
+                
+                echo "📄 Generated test report contents:"
                 cat post-deployment-test-report.txt
                 
                 exit 0
@@ -1279,121 +1228,188 @@ EOF
             echo "  Skip Testing: $SKIP_TESTING"
             echo ""
             
-            # Read deployment and test results
-            if [ -f "deployment-summary.json" ]; then
-                API_URL=$(jq -r '.outputs.api_url' deployment-summary.json)
-                FRONTEND_URL=$(jq -r '.outputs.frontend_url' deployment-summary.json)
-                S3_BUCKET=$(jq -r '.outputs.s3_bucket' deployment-summary.json)
-                DEPLOYMENT_TYPE=$(jq -r '.deployment_type' deployment-summary.json)
-                HANDLER_USED=$(jq -r '.handler_used' deployment-summary.json)
-                EXECUTION_MODE_FROM_SUMMARY=$(jq -r '.execution_mode // "unknown"' deployment-summary.json)
-                TRIGGER_TYPE_FROM_SUMMARY=$(jq -r '.trigger_type // "unknown"' deployment-summary.json)
-            else
-                echo "⚠️ Deployment summary not available"
-                API_URL="unknown"
-                FRONTEND_URL="unknown"
-                S3_BUCKET="unknown"
-                DEPLOYMENT_TYPE="unknown"
-                HANDLER_USED="unknown"
-                EXECUTION_MODE_FROM_SUMMARY="unknown"
-                TRIGGER_TYPE_FROM_SUMMARY="unknown"
+            # Initialize notification variables
+            TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+            COMMIT_REF="${CODECATALYST_SOURCE_BRANCH_REF:-unknown}"
+            WORKFLOW_NAME="${CODECATALYST_WORKFLOW_NAME:-Infrastructure_Deployment_Pipeline}"
+            
+            # Make artifact handler executable
+            chmod +x scripts/artifact-handler.sh
+            
+            # Read deployment and test results with graceful handling of placeholder vs real data
+            echo "📋 Reading deployment and test results using artifact handler..."
+            
+            API_URL=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".outputs.api_url" "not_deployed")
+            FRONTEND_URL=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".outputs.frontend_url" "not_deployed")
+            S3_BUCKET=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".outputs.s3_bucket" "not_deployed")
+            DEPLOYMENT_TYPE=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".deployment_type" "unknown")
+            HANDLER_USED=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".handler_used" "unknown")
+            EXECUTION_MODE_FROM_SUMMARY=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".execution_mode" "$EXECUTION_MODE")
+            TRIGGER_TYPE_FROM_SUMMARY=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".trigger_type" "$TRIGGER_TYPE")
+            DEPLOYMENT_STATUS=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".deployment_successful" "unknown")
+            
+            # Check if deployment summary is placeholder
+            if ./scripts/artifact-handler.sh is-placeholder "deployment-summary.json"; then
+                echo "📋 Placeholder deployment summary detected - using validation mode data"
+                DEPLOYMENT_STATUS="validation_placeholder"
             fi
             
-            # Create comprehensive deployment notification based on execution mode
-            if [ "$EXECUTION_MODE" = "validation" ]; then
-                echo "🔍 Infrastructure Validation Completed!" > deployment-notification.txt
-                echo "=======================================" >> deployment-notification.txt
-            else
-                echo "🚀 Infrastructure Deployment Completed Successfully!" > deployment-notification.txt
-                echo "==================================================" >> deployment-notification.txt
-            fi
-            echo "" >> deployment-notification.txt
-            echo "Execution Information:" >> deployment-notification.txt
-            echo "=====================" >> deployment-notification.txt
-            echo "Timestamp: $(date)" >> deployment-notification.txt
-            echo "Execution Mode: $EXECUTION_MODE" >> deployment-notification.txt
-            echo "Trigger Type: $TRIGGER_TYPE" >> deployment-notification.txt
-            echo "Branch: $BRANCH_NAME" >> deployment-notification.txt
-            echo "Commit: ${CODECATALYST_SOURCE_BRANCH_REF:-unknown}" >> deployment-notification.txt
-            echo "Deployment Type: $DEPLOYMENT_TYPE" >> deployment-notification.txt
-            echo "Handler Used: $HANDLER_USED" >> deployment-notification.txt
-            echo "" >> deployment-notification.txt
-            if [ "$EXECUTION_MODE" = "validation" ]; then
-                echo "Validation Results:" >> deployment-notification.txt
-                echo "==================" >> deployment-notification.txt
-                echo "✅ API Code Synchronization: Validated" >> deployment-notification.txt
-                echo "✅ API Integration: Validated" >> deployment-notification.txt
-                echo "✅ Infrastructure Configuration: Validated" >> deployment-notification.txt
-                echo "⏭️ Deployment: Skipped (validation mode)" >> deployment-notification.txt
-                echo "⏭️ Testing: Skipped (validation mode)" >> deployment-notification.txt
-            else
-                echo "Deployed Resources:" >> deployment-notification.txt
-                echo "==================" >> deployment-notification.txt
-                echo "🌐 API Gateway: $API_URL" >> deployment-notification.txt
-                echo "🎨 Frontend (CloudFront): $FRONTEND_URL" >> deployment-notification.txt
-                echo "📦 S3 Bucket: $S3_BUCKET" >> deployment-notification.txt
-            fi
-            echo "" >> deployment-notification.txt
-            echo "Integration Status:" >> deployment-notification.txt
-            echo "==================" >> deployment-notification.txt
-            if [ "$DEPLOYMENT_TYPE" = "api_sync" ]; then
-                if [ "$EXECUTION_MODE" = "validation" ]; then
-                    echo "✅ Registry-API code integration validated" >> deployment-notification.txt
-                else
-                    echo "✅ Registry-API code successfully integrated" >> deployment-notification.txt
-                fi
-            else
-                if [ "$EXECUTION_MODE" = "validation" ]; then
-                    echo "ℹ️ Infrastructure handlers validation completed" >> deployment-notification.txt
-                else
-                    echo "ℹ️ Using existing infrastructure handlers" >> deployment-notification.txt
-                fi
-            fi
+            # Read test results with graceful handling
+            TEST_STATUS="unknown"
             if [ -f "post-deployment-test-report.txt" ]; then
-                if [ "$EXECUTION_MODE" = "validation" ]; then
-                    echo "⏭️ Post-deployment tests skipped (validation mode)" >> deployment-notification.txt
+                echo "📋 Reading test report..."
+                if ./scripts/artifact-handler.sh is-placeholder "post-deployment-test-report.txt"; then
+                    echo "📋 Placeholder test report detected"
+                    TEST_STATUS="skipped"
+                elif grep -q "All tests passed" post-deployment-test-report.txt; then
+                    TEST_STATUS="passed"
+                elif grep -q "Some tests failed" post-deployment-test-report.txt; then
+                    TEST_STATUS="failed"
                 else
-                    echo "✅ Post-deployment tests completed" >> deployment-notification.txt
+                    TEST_STATUS="completed"
                 fi
             else
-                echo "⚠️ Post-deployment tests not available" >> deployment-notification.txt
-            fi
-            echo "" >> deployment-notification.txt
-            echo "Next Steps:" >> deployment-notification.txt
-            echo "==========" >> deployment-notification.txt
-            if [ "$EXECUTION_MODE" = "validation" ]; then
-                echo "1. Review validation results and fix any issues" >> deployment-notification.txt
-                echo "2. Merge pull request after validation passes" >> deployment-notification.txt
-                echo "3. Full deployment will run automatically on main branch" >> deployment-notification.txt
-                echo "4. Monitor for any integration issues" >> deployment-notification.txt
-            else
-                echo "1. Verify API endpoints are working correctly" >> deployment-notification.txt
-                echo "2. Update frontend configuration if needed" >> deployment-notification.txt
-                echo "3. Monitor application performance and logs" >> deployment-notification.txt
-                echo "4. Coordinate with registry-api team for any issues" >> deployment-notification.txt
-            fi
-            echo "" >> deployment-notification.txt
-            if [ "$DEPLOYMENT_TYPE" = "api_sync" ]; then
                 if [ "$EXECUTION_MODE" = "validation" ]; then
-                    echo "🔄 This validation included synchronized code from registry-api repository" >> deployment-notification.txt
+                    TEST_STATUS="skipped"
                 else
-                    echo "🔄 This deployment included synchronized code from registry-api repository" >> deployment-notification.txt
+                    TEST_STATUS="not_available"
                 fi
-                echo "" >> deployment-notification.txt
-            fi
-            if [ "$EXECUTION_MODE" = "validation" ]; then
-                echo "Validation completed successfully! ✅" >> deployment-notification.txt
-            else
-                echo "Deployment completed successfully! 🎉" >> deployment-notification.txt
             fi
             
+            # Create mode-specific notification using artifact handler
+            echo "🔧 Using artifact handler to create notification artifacts..."
+            
+            # Create placeholder notification with proper structure
+            if ./scripts/artifact-handler.sh create-placeholder deploymentNotification "$EXECUTION_MODE" "$TRIGGER_TYPE" "$BRANCH_NAME" "."; then
+                echo "✅ Notification artifacts created successfully"
+            else
+                echo "❌ Failed to create notification artifacts"
+                exit 1
+            fi
+            
+            # For deployment mode, update notification with real data
+            if [ "$EXECUTION_MODE" = "deployment" ]; then
+                echo "🔧 Updating notification with deployment-specific data..."
+                
+                # Create deployment-specific notification
+                cat > deployment-notification.txt << EOF
+🚀 Infrastructure Deployment Completed
+=====================================
+
+✅ Deployment completed successfully!
+
+📊 Deployment Context:
+  Timestamp: $TIMESTAMP
+  Trigger: $TRIGGER_TYPE
+  Branch: $BRANCH_NAME
+  Commit: $COMMIT_REF
+  Workflow: $WORKFLOW_NAME
+  Deployment Type: $DEPLOYMENT_TYPE
+  Handler Used: $HANDLER_USED
+
+🏗️ Deployed Resources:
+$([ "$API_URL" != "not_deployed" ] && echo "  🌐 API Gateway: $API_URL" || echo "  🌐 API Gateway: Deployment information not available")
+$([ "$FRONTEND_URL" != "not_deployed" ] && echo "  🎨 Frontend (CloudFront): $FRONTEND_URL" || echo "  🎨 Frontend (CloudFront): Deployment information not available")
+$([ "$S3_BUCKET" != "not_deployed" ] && echo "  📦 S3 Bucket: $S3_BUCKET" || echo "  📦 S3 Bucket: Deployment information not available")
+
+🔧 Integration Status:
+$([ "$DEPLOYMENT_TYPE" = "api_sync" ] && echo "  ✅ Registry-API code successfully integrated and deployed" || echo "  ℹ️ Using existing infrastructure handlers")
+$([ "$DEPLOYMENT_TYPE" = "api_sync" ] && echo "  🔗 Using integrated_api_handler.py with registry-api components" || echo "  🔗 Using enhanced_api_handler.py (infrastructure default)")
+
+🧪 Testing Status:
+$(case "$TEST_STATUS" in
+    "passed") echo "  ✅ Post-deployment tests: All tests passed" ;;
+    "failed") echo "  ❌ Post-deployment tests: Some tests failed - review test report" ;;
+    "completed") echo "  ✅ Post-deployment tests: Completed - review test report for details" ;;
+    "not_available") echo "  ⚠️ Post-deployment tests: Test report not available" ;;
+    *) echo "  ❓ Post-deployment tests: Status unknown" ;;
+esac)
+
+✅ Next Steps:
+  1. Verify API endpoints are responding correctly
+  2. Update frontend configuration if needed
+  3. Monitor application performance and CloudWatch logs
+  4. Coordinate with registry-api team for any integration issues
+$([ "$TEST_STATUS" = "failed" ] && echo "  5. ⚠️ Review and address failed test cases")
+
+🎉 Infrastructure deployment successful! ✅
+EOF
+                
+                # Update notification-data.json with real deployment data
+                cat > notification-data.json << EOF
+{
+  "timestamp": "$TIMESTAMP",
+  "execution_mode": "$EXECUTION_MODE",
+  "trigger_type": "$TRIGGER_TYPE",
+  "branch_name": "$BRANCH_NAME",
+  "commit_ref": "$COMMIT_REF",
+  "workflow_name": "$WORKFLOW_NAME",
+  "deployment_type": "$DEPLOYMENT_TYPE",
+  "handler_used": "$HANDLER_USED",
+  "deployment_status": "$DEPLOYMENT_STATUS",
+  "test_status": "$TEST_STATUS",
+  "resources": {
+    "api_url": "$API_URL",
+    "frontend_url": "$FRONTEND_URL",
+    "s3_bucket": "$S3_BUCKET"
+  },
+  "stages_executed": [
+    "CheckAPISync",
+    "PrepareAPIIntegration", 
+    "ValidateInfrastructure",
+    "DeployInfrastructure",
+    "PostDeploymentTests"
+  ],
+  "stages_skipped": [],
+  "notification_type": "deployment_completion",
+  "placeholder_artifact": false
+}
+EOF
+            fi
+            
+            # Validate notification artifact structure
+            if ./scripts/artifact-handler.sh validate deploymentNotification "."; then
+                echo "✅ Notification artifact structure validation passed"
+            else
+                echo "⚠️ Notification artifact structure validation failed - continuing with available artifacts"
+            fi
+            
+            # Test notification consumption compatibility
+            echo "🧪 Testing notification consumption compatibility..."
+            if ./scripts/artifact-handler.sh test-consumption deploymentNotification "."; then
+                echo "✅ Notification consumption test passed"
+            else
+                echo "⚠️ Notification consumption test failed - external systems may have issues"
+            fi
+            
+            # Display the notification
+            echo ""
+            echo "📋 Generated Notification:"
+            echo "========================="
             cat deployment-notification.txt
             
-            # Store notification for potential external systems
-            echo "📤 Storing deployment notification..."
+            echo ""
+            echo "📋 Structured notification data:"
+            cat notification-data.json | jq '.' 2>/dev/null || cat notification-data.json
             
-            # This could be extended to send notifications to Slack, email, etc.
-            echo "✅ Deployment notification completed"
+            # Store notification for potential external integrations
+            echo ""
+            echo "💾 Storing notification artifacts..."
+            echo "✅ Notification artifacts created successfully"
+            
+            # Future enhancement: This could be extended to send notifications to:
+            # - Slack channels
+            # - Email recipients  
+            # - Microsoft Teams
+            # - Custom webhooks
+            # - AWS SNS topics
+            
+            echo ""
+            if [ "$EXECUTION_MODE" = "validation" ]; then
+                echo "✅ Validation notification completed successfully"
+            else
+                echo "✅ Deployment notification completed successfully"
+            fi
       Container:
         Registry: CODECATALYST
         Image: CodeCatalystLinux_x86_64:2024_03
@@ -1402,3 +1418,4 @@ EOF
         - Name: deploymentNotification
           Files:
             - "deployment-notification.txt"
+            - "notification-data.json"

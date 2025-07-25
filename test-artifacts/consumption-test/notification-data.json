@@ -1,0 +1,28 @@
+{
+  "timestamp": "2025-07-25T03:54:30Z",
+  "execution_mode": "validation",
+  "trigger_type": "PULLREQUEST",
+  "branch_name": "feature-branch",
+  "commit_ref": "unknown",
+  "workflow_name": "Infrastructure_Deployment_Pipeline",
+  "deployment_type": "validation_placeholder",
+  "handler_used": "validation_placeholder",
+  "deployment_status": "skipped",
+  "test_status": "skipped",
+  "resources": {
+    "api_url": "https://validation-placeholder.example.com/api",
+    "frontend_url": "https://validation-placeholder.example.com",
+    "s3_bucket": "validation-placeholder-bucket"
+  },
+  "stages_executed": [
+    "CheckAPISync",
+    "PrepareAPIIntegration", 
+    "ValidateInfrastructure"
+  ],
+  "stages_skipped": [
+    "DeployInfrastructure",
+    "PostDeploymentTests"
+  ],
+  "notification_type": "validation_summary",
+  "placeholder_artifact": true
+}

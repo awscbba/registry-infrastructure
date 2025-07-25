@@ -1,0 +1,18 @@
+{
+  "artifact_name": "deploymentSummary",
+  "validation_timestamp": "2025-07-25T03:54:28Z",
+  "validation_passed": true,
+  "expected_files": [
+  "deployment-summary.json",
+  "outputs.json",
+  "deployment.log"
+],
+  "present_files": [
+  "deployment-summary.json",
+  "outputs.json",
+  "deployment.log"
+],
+  "missing_files": [
+  ""
+]
+}

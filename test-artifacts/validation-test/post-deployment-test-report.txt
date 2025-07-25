@@ -1,0 +1,27 @@
+Post-Deployment Test Report
+==========================
+Timestamp: 2025-07-25T03:54:28Z
+Execution Mode: validation
+Trigger Type: PULLREQUEST
+Branch: feature-branch
+API URL: N/A (validation mode)
+Deployment Type: N/A (validation mode)
+Handler Used: N/A (validation mode)
+Overall Status: SKIPPED
+
+Test Results:
+- Health endpoint: SKIPPED (validation mode)
+- People list: SKIPPED (validation mode)
+- Person CRUD: SKIPPED (validation mode)
+
+ℹ️ Tests skipped for validation mode
+🔄 Trigger: PULLREQUEST
+🌿 Branch: feature-branch
+
+📋 Validation Mode Summary:
+- Post-deployment tests are skipped in validation mode
+- This placeholder report maintains artifact compatibility
+- Actual testing occurs only on main branch deployments
+
+Placeholder Artifact: true
+Compatibility Mode: enabled

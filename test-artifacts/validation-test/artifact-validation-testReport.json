@@ -1,0 +1,14 @@
+{
+  "artifact_name": "testReport",
+  "validation_timestamp": "2025-07-25T03:54:29Z",
+  "validation_passed": true,
+  "expected_files": [
+  "post-deployment-test-report.txt"
+],
+  "present_files": [
+  "post-deployment-test-report.txt"
+],
+  "missing_files": [
+  ""
+]
+}
