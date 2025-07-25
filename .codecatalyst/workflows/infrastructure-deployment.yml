@@ -9,8 +9,8 @@ Triggers:
     Branches:
       - main
     Events:
-      - PULLREQUEST_CREATED
-      - PULLREQUEST_REVISION_CREATED
+      - OPEN
+      - REVISION
   - Type: MANUAL
 
 Actions:
@@ -34,19 +34,19 @@ Actions:
             echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "🏷️ Stage: CheckAPISync (Always Executes)"
             echo ""
-            
+
             # Execute execution mode detection
             echo "🎯 Detecting execution mode..."
             chmod +x scripts/execution-mode-detection.sh
             ./scripts/execution-mode-detection.sh
-            
+
             # Source the execution mode environment variables
             source execution-mode-env.sh
-            
+
             # Source workflow logger for consistent logging
             chmod +x scripts/workflow-logger.sh
             source scripts/workflow-logger.sh
-            
+
             echo ""
             echo "📊 Stage Execution Context:"
             echo "  Execution Mode: $EXECUTION_MODE"
@@ -55,14 +55,14 @@ Actions:
             echo "  Stage Decision: EXECUTE (CheckAPISync always runs in both modes)"
             echo "  Stage Purpose: $([ "$EXECUTION_MODE" = "validation" ] && echo "Validate API sync for pull request feedback" || echo "Check API sync before deployment")"
             echo ""
-            
+
             # Display mode-specific execution information
             if [ "$EXECUTION_MODE" = "validation" ]; then
                 log_validation_only_message "$TRIGGER_TYPE" "$BRANCH_NAME"
             else
                 log_deployment_mode_message "$TRIGGER_TYPE" "$BRANCH_NAME"
             fi
-            
+
             # Check if this deployment was triggered by API sync
             if [ -f "lambda/main.py" ] && [ -d "lambda/src" ]; then
                 echo "✅ API code synchronized from registry-api repository"
@@ -83,14 +83,14 @@ Actions:
                 echo "📊 Current lambda structure:"
                 ls -la lambda/ || echo "Lambda directory not found"
             fi
-            
+
             # Create deployment context
             DEPLOYMENT_TYPE=$([ -f "lambda/main.py" ] && echo "api_sync" || echo "infrastructure_only")
             API_SYNC_DETECTED=$([ -f "lambda/main.py" ] && echo "true" || echo "false")
             TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             BRANCH=${CODECATALYST_SOURCE_BRANCH_NAME:-main}
             COMMIT=${CODECATALYST_SOURCE_BRANCH_REF:-unknown}
-            
+
             # Merge execution context with deployment context
             echo "{" > deployment-context.json
             echo "  \"deployment_type\": \"$DEPLOYMENT_TYPE\"," >> deployment-context.json
@@ -104,7 +104,7 @@ Actions:
             echo "  \"skip_deployment\": \"$SKIP_DEPLOYMENT\"," >> deployment-context.json
             echo "  \"skip_testing\": \"$SKIP_TESTING\"" >> deployment-context.json
             echo "}" >> deployment-context.json
-            
+
             cat deployment-context.json
             echo ""
             echo "📊 Stage Completion Summary:"
@@ -149,14 +149,14 @@ Actions:
             echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "🏷️ Stage: PrepareAPIIntegration (Always Executes)"
             echo ""
-            
+
             # Source execution mode environment variables
             source execution-mode-env.sh
-            
+
             # Read deployment context
             DEPLOYMENT_TYPE=$(jq -r '.deployment_type' deployment-context.json)
             API_SYNC_DETECTED=$(jq -r '.api_sync_detected' deployment-context.json)
-            
+
             echo "📊 Stage Execution Context:"
             echo "  Execution Mode: $EXECUTION_MODE"
             echo "  Trigger Type: $TRIGGER_TYPE"
@@ -170,7 +170,7 @@ Actions:
             echo "  Deployment type: $DEPLOYMENT_TYPE"
             echo "  API sync detected: $API_SYNC_DETECTED"
             echo ""
-            
+
             if [ "$API_SYNC_DETECTED" = "true" ]; then
                 echo "🔄 Integrating synchronized API code with infrastructure"
                 
@@ -249,7 +249,7 @@ Actions:
             else
                 echo "ℹ️ No API sync detected - using existing infrastructure handlers"
             fi
-            
+
             # Create integration summary
             # Create integration summary
             echo "API Integration Summary" > api-integration-summary.txt
@@ -271,7 +271,7 @@ Actions:
             echo "1. integrated_api_handler.py (if API sync detected)" >> api-integration-summary.txt
             echo "2. enhanced_api_handler.py (fallback)" >> api-integration-summary.txt
             echo "3. api_handler.py (legacy fallback)" >> api-integration-summary.txt
-            
+
             cat api-integration-summary.txt
             echo ""
             echo "📊 Stage Completion Summary:"
@@ -318,10 +318,10 @@ Actions:
             echo "🏷️ Stage: ValidateInfrastructure (Always Executes - OPTIMIZED)"
             echo "🎯 Target: Fast feedback within 5-10 minutes"
             echo ""
-            
+
             # Source execution mode environment variables
             source execution-mode-env.sh
-            
+
             echo "📊 Stage Execution Context:"
             echo "  Execution Mode: $EXECUTION_MODE"
             echo "  Trigger Type: $TRIGGER_TYPE"
@@ -332,15 +332,15 @@ Actions:
             echo "  Stage Purpose: $([ "$EXECUTION_MODE" = "validation" ] && echo "Fast validation for pull request feedback" || echo "Validate infrastructure before deployment")"
             echo "  Optimization Level: HIGH (caching, parallel processing, minimal dependencies)"
             echo ""
-            
+
             # Install essential tools only
             echo "📦 Installing essential tools..."
             curl --proto '=https' --tlsv1.2 -sSf https://just.systems/install.sh | bash -s -- --to /usr/local/bin
-            
+
             # Make optimization scripts executable
             chmod +x scripts/optimized-validation.sh
             chmod +x scripts/performance-profiler.sh
-            
+
             # Choose validation approach based on execution mode
             if [ "$EXECUTION_MODE" = "validation" ]; then
                 echo "🚀 Running OPTIMIZED validation for fast pull request feedback..."
@@ -470,7 +470,7 @@ Actions:
                     echo "❌ Comprehensive validation failed with $VALIDATION_ERRORS errors"
                 fi
             fi
-            
+
             # Create final validation results
             if [ "$VALIDATION_STATUS" = "success" ]; then
                 echo ""
@@ -507,12 +507,12 @@ Actions:
                 echo "❌ Failed to install CDK CLI"
                 log_validation "ERROR" "CDK CLI installation failed" "Check npm and Node.js setup"
             fi
-            
+
             # CDK version check
             CDK_VERSION=$(cdk --version 2>/dev/null || echo "unknown")
             echo "CDK version: $CDK_VERSION"
             log_validation "INFO" "CDK version: $CDK_VERSION"
-            
+
             # CDK synthesis validation with detailed error reporting
             echo "🔄 Performing CDK synthesis validation..."
             if source .venv/bin/activate && cdk synth --quiet > cdk-synth-output.json 2>cdk-synth-errors.txt; then
@@ -572,19 +572,19 @@ Actions:
                 
                 VALIDATION_ERRORS=$((VALIDATION_ERRORS + 1))
             fi
-            
+
             # 5. Generate Validation Summary
             echo ""
             echo "📋 Step 5: Validation Summary"
             echo "============================"
-            
+
             echo "" >> $VALIDATION_REPORT
             echo "VALIDATION SUMMARY" >> $VALIDATION_REPORT
             echo "==================" >> $VALIDATION_REPORT
             echo "Total Errors: $VALIDATION_ERRORS" >> $VALIDATION_REPORT
             echo "Total Warnings: $VALIDATION_WARNINGS" >> $VALIDATION_REPORT
             echo "" >> $VALIDATION_REPORT
-            
+
             if [ $VALIDATION_ERRORS -eq 0 ]; then
                 echo "✅ Infrastructure validation completed successfully"
                 echo "  Errors: $VALIDATION_ERRORS"
@@ -630,7 +630,7 @@ Actions:
                 
                 exit 1
             fi
-            
+
             echo ""
             echo "📊 Stage Completion Summary:"
             echo "  Stage: ValidateInfrastructure"
@@ -681,10 +681,10 @@ Actions:
             echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "🏷️ Stage: DeployInfrastructure (Conditional Execution)"
             echo ""
-            
+
             # Source execution mode environment variables
             source execution-mode-env.sh
-            
+
             echo "📊 Stage Execution Context:"
             echo "  Execution Mode: $EXECUTION_MODE"
             echo "  Trigger Type: $TRIGGER_TYPE"
@@ -692,7 +692,7 @@ Actions:
             echo "  Skip Deployment: $SKIP_DEPLOYMENT"
             echo "  Skip Testing: $SKIP_TESTING"
             echo ""
-            
+
             echo "🎯 Stage Decision Logic:"
             if [ "$SKIP_DEPLOYMENT" = "true" ]; then
                 echo "  ⏭️ Deployment will be SKIPPED ($EXECUTION_MODE mode)"
@@ -706,18 +706,18 @@ Actions:
                 echo "  🏗️ Impact: Live infrastructure changes will be applied"
             fi
             echo ""
-            
+
             # Read deployment context for consistent artifact creation
             API_SYNC_DETECTED=$(jq -r '.api_sync_detected // false' deployment-context.json 2>/dev/null || echo "false")
             DEPLOYMENT_TYPE=$(jq -r '.deployment_type // "infrastructure_only"' deployment-context.json 2>/dev/null || echo "infrastructure_only")
             TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-            
+
             echo "📋 Deployment Context:"
             echo "  API Sync Detected: $API_SYNC_DETECTED"
             echo "  Deployment Type: $DEPLOYMENT_TYPE"
             echo "  Timestamp: $TIMESTAMP"
             echo ""
-            
+
             # Determine execution mode and create appropriate artifacts
             if [ "$SKIP_DEPLOYMENT" = "true" ]; then
                 echo "🔍 VALIDATION MODE - Creating placeholder artifacts"
@@ -773,7 +773,7 @@ Actions:
                 echo "🎯 Validation mode execution completed - ready for downstream stages"
                 exit 0
             fi
-            
+
             echo "🏗️ DEPLOYMENT MODE - Executing actual infrastructure deployment"
             echo "=============================================================="
             echo "📊 Stage Execution Decision: EXECUTE DEPLOYMENT"
@@ -783,19 +783,19 @@ Actions:
             echo "  Rationale: Deployment mode applies changes to live infrastructure"
             echo "  Action: Executing CDK deployment to AWS"
             echo ""
-            
+
             # Setup Python environment for deployment
             echo "🔧 Setting up deployment environment..."
             python3 -m venv .venv
             source .venv/bin/activate
-            
+
             # Install CDK dependencies with error handling
             echo "📦 Installing CDK dependencies..."
             if ! pip install aws-cdk-lib==2.80.0 constructs>=10.0.0,\<11.0.0 boto3>=1.34.0 pydantic>=2.7.0; then
                 echo "❌ Failed to install Python CDK dependencies"
                 exit 1
             fi
-            
+
             # Install CDK CLI with error handling
             echo "📦 Installing CDK CLI..."
             npm uninstall -g aws-cdk 2>/dev/null || echo "No existing CDK to uninstall"
@@ -803,10 +803,10 @@ Actions:
                 echo "❌ Failed to install CDK CLI"
                 exit 1
             fi
-            
+
             echo "✅ Deployment environment setup completed"
             echo ""
-            
+
             # Pre-deployment validation
             echo "🔍 Pre-deployment validation..."
             if ! aws sts get-caller-identity > /dev/null 2>&1; then
@@ -814,17 +814,17 @@ Actions:
                 exit 1
             fi
             echo "✅ AWS credentials validated"
-            
+
             # Start deployment with comprehensive logging
             echo "🏗️ Starting CDK deployment..."
             echo "Deployment type: $DEPLOYMENT_TYPE"
             echo "API sync detected: $API_SYNC_DETECTED"
             echo "Handler selection: $([ "$API_SYNC_DETECTED" = "true" ] && echo "integrated_api_handler" || echo "enhanced_api_handler")"
             echo ""
-            
+
             # Record deployment start time
             DEPLOYMENT_START=$(date +%s)
-            
+
             # Execute CDK deployment with detailed error handling
             echo "🚀 Executing CDK deployment..."
             if source .venv/bin/activate && cdk deploy --require-approval never --outputs-file outputs.json 2>&1 | tee deployment.log; then
@@ -995,10 +995,10 @@ Actions:
             echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "🏷️ Stage: PostDeploymentTests (Conditional Execution)"
             echo ""
-            
+
             # Source execution mode environment variables
             source execution-mode-env.sh
-            
+
             echo "📊 Stage Execution Context:"
             echo "  Execution Mode: $EXECUTION_MODE"
             echo "  Trigger Type: $TRIGGER_TYPE"
@@ -1006,7 +1006,7 @@ Actions:
             echo "  Skip Deployment: $SKIP_DEPLOYMENT"
             echo "  Skip Testing: $SKIP_TESTING"
             echo ""
-            
+
             echo "🎯 Stage Decision Logic:"
             if [ "$SKIP_TESTING" = "true" ]; then
                 echo "  ⏭️ Testing will be SKIPPED ($EXECUTION_MODE mode)"
@@ -1020,7 +1020,7 @@ Actions:
                 echo "  🧪 Impact: Validate live application functionality"
             fi
             echo ""
-            
+
             # Check if testing should be skipped based on execution mode
             if [ "$SKIP_TESTING" = "true" ]; then
                 echo "📊 Stage Execution Decision: SKIP TESTING"
@@ -1071,7 +1071,7 @@ Actions:
                 
                 exit 0
             fi
-            
+
             # Read deployment summary
             if [ -f "deployment-summary.json" ]; then
                 API_URL=$(jq -r '.outputs.api_url' deployment-summary.json)
@@ -1086,11 +1086,11 @@ Actions:
                 echo "❌ Deployment summary not found"
                 exit 1
             fi
-            
+
             # Wait for deployment to stabilize
             echo "⏳ Waiting for deployment to stabilize..."
             sleep 30
-            
+
             # Test function
             test_endpoint() {
                 local endpoint="$1"
@@ -1119,16 +1119,16 @@ Actions:
                     return 1
                 fi
             }
-            
+
             # Run comprehensive API tests
             TESTS_PASSED=true
-            
+
             # Basic health check
             test_endpoint "/health" "200" "Health endpoint" || TESTS_PASSED=false
-            
+
             # People endpoints
             test_endpoint "/people" "200" "People list endpoint" || TESTS_PASSED=false
-            
+
             # Test person creation
             echo "Testing person creation..."
             create_data='{
@@ -1145,11 +1145,11 @@ Actions:
                     "country": "USA"
                 }
             }'
-            
+
             create_response=$(curl -s -w "%{http_code}" -X POST "$API_URL/people" \
                 -H "Content-Type: application/json" \
                 -d "$create_data" -o create_response.json)
-            
+
             if [ "$create_response" = "201" ]; then
                 echo "✅ Person creation - OK"
                 PERSON_ID=$(jq -r '.id' create_response.json 2>/dev/null || echo "")
@@ -1171,10 +1171,10 @@ Actions:
                 cat create_response.json 2>/dev/null || echo "No response body"
                 TESTS_PASSED=false
             fi
-            
+
             # Test search endpoint (if available)
             test_endpoint "/people/search" "200" "People search endpoint" || echo "⚠️ Search endpoint not available (non-critical)"
-            
+
             # Generate test report
             # Generate test report
             echo "Post-Deployment Test Report" > post-deployment-test-report.txt
@@ -1211,9 +1211,9 @@ Actions:
             else
                 echo "❌ Some tests failed" >> post-deployment-test-report.txt
             fi
-            
+
             cat post-deployment-test-report.txt
-            
+
             echo ""
             echo "📊 Stage Completion Summary (Deployment Mode):"
             echo "  Stage: PostDeploymentTests"
@@ -1224,7 +1224,7 @@ Actions:
             echo "  Next Stage: NotifyDeploymentStatus (will execute)"
             echo "  Duration: $(date -u +%Y-%m-%dT%H:%M:%SZ) (end time)"
             echo ""
-            
+
             if [ "$TESTS_PASSED" = true ]; then
                 echo "🎉 Post-deployment tests passed!"
                 exit 0
@@ -1266,10 +1266,10 @@ Actions:
             echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo "🏷️ Stage: NotifyDeploymentStatus (Always Executes)"
             echo ""
-            
+
             # Source execution mode environment variables
             source execution-mode-env.sh
-            
+
             echo "📊 Stage Execution Context:"
             echo "  Execution Mode: $EXECUTION_MODE"
             echo "  Trigger Type: $TRIGGER_TYPE"
@@ -1279,18 +1279,18 @@ Actions:
             echo "  Stage Decision: EXECUTE (NotifyDeploymentStatus always runs with mode-specific notifications)"
             echo "  Stage Purpose: $([ "$EXECUTION_MODE" = "validation" ] && echo "Create validation summary notification" || echo "Create deployment completion notification")"
             echo ""
-            
+
             # Initialize notification variables
             TIMESTAMP=$(date -u +%Y-%m-%dT%H:%M:%SZ)
             COMMIT_REF="${CODECATALYST_SOURCE_BRANCH_REF:-unknown}"
             WORKFLOW_NAME="${CODECATALYST_WORKFLOW_NAME:-Infrastructure_Deployment_Pipeline}"
-            
+
             # Make artifact handler executable
             chmod +x scripts/artifact-handler.sh
-            
+
             # Read deployment and test results with graceful handling of placeholder vs real data
             echo "📋 Reading deployment and test results using artifact handler..."
-            
+
             API_URL=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".outputs.api_url" "not_deployed")
             FRONTEND_URL=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".outputs.frontend_url" "not_deployed")
             S3_BUCKET=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".outputs.s3_bucket" "not_deployed")
@@ -1299,13 +1299,13 @@ Actions:
             EXECUTION_MODE_FROM_SUMMARY=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".execution_mode" "$EXECUTION_MODE")
             TRIGGER_TYPE_FROM_SUMMARY=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".trigger_type" "$TRIGGER_TYPE")
             DEPLOYMENT_STATUS=$(./scripts/artifact-handler.sh handle-data "deployment-summary.json" ".deployment_successful" "unknown")
-            
+
             # Check if deployment summary is placeholder
             if ./scripts/artifact-handler.sh is-placeholder "deployment-summary.json"; then
                 echo "📋 Placeholder deployment summary detected - using validation mode data"
                 DEPLOYMENT_STATUS="validation_placeholder"
             fi
-            
+
             # Read test results with graceful handling
             TEST_STATUS="unknown"
             if [ -f "post-deployment-test-report.txt" ]; then
@@ -1327,10 +1327,10 @@ Actions:
                     TEST_STATUS="not_available"
                 fi
             fi
-            
+
             # Create mode-specific notification using artifact handler
             echo "🔧 Using artifact handler to create notification artifacts..."
-            
+
             # Create placeholder notification with proper structure
             if ./scripts/artifact-handler.sh create-placeholder deploymentNotification "$EXECUTION_MODE" "$TRIGGER_TYPE" "$BRANCH_NAME" "."; then
                 echo "✅ Notification artifacts created successfully"
@@ -1338,7 +1338,7 @@ Actions:
                 echo "❌ Failed to create notification artifacts"
                 exit 1
             fi
-            
+
             # For deployment mode, update notification with real data
             if [ "$EXECUTION_MODE" = "deployment" ]; then
                 echo "🔧 Updating notification with deployment-specific data..."
@@ -1416,14 +1416,14 @@ Actions:
                 echo "  \"placeholder_artifact\": false" >> notification-data.json
                 echo "}" >> notification-data.json
             fi
-            
+
             # Validate notification artifact structure
             if ./scripts/artifact-handler.sh validate deploymentNotification "."; then
                 echo "✅ Notification artifact structure validation passed"
             else
                 echo "⚠️ Notification artifact structure validation failed - continuing with available artifacts"
             fi
-            
+
             # Test notification consumption compatibility
             echo "🧪 Testing notification consumption compatibility..."
             if ./scripts/artifact-handler.sh test-consumption deploymentNotification "."; then
@@ -1431,29 +1431,29 @@ Actions:
             else
                 echo "⚠️ Notification consumption test failed - external systems may have issues"
             fi
-            
+
             # Display the notification
             echo ""
             echo "📋 Generated Notification:"
             echo "========================="
             cat deployment-notification.txt
-            
+
             echo ""
             echo "📋 Structured notification data:"
             cat notification-data.json | jq '.' 2>/dev/null || cat notification-data.json
-            
+
             # Store notification for potential external integrations
             echo ""
             echo "💾 Storing notification artifacts..."
             echo "✅ Notification artifacts created successfully"
-            
+
             # Future enhancement: This could be extended to send notifications to:
             # - Slack channels
             # - Email recipients  
             # - Microsoft Teams
             # - Custom webhooks
             # - AWS SNS topics
-            
+
             echo ""
             echo "📊 Stage Completion Summary:"
             echo "  Stage: NotifyDeploymentStatus"
@@ -1463,7 +1463,7 @@ Actions:
             echo "  Workflow Status: $([ "$EXECUTION_MODE" = "validation" ] && echo "Validation completed" || echo "Deployment completed")"
             echo "  Duration: $(date -u +%Y-%m-%dT%H:%M:%SZ) (end time)"
             echo ""
-            
+
             echo "🎯 WORKFLOW COMPLETION SUMMARY:"
             echo "==============================="
             echo "  Execution Mode: $EXECUTION_MODE"
@@ -1474,7 +1474,7 @@ Actions:
             echo "  Infrastructure Changes: $([ "$EXECUTION_MODE" = "validation" ] && echo "None (validation mode)" || echo "Applied to live environment")"
             echo "  Outcome: $([ "$EXECUTION_MODE" = "validation" ] && echo "Pull request validation feedback provided" || echo "Live application deployed and tested")"
             echo ""
-            
+
             if [ "$EXECUTION_MODE" = "validation" ]; then
                 echo "✅ Validation notification completed successfully"
                 echo "🔍 Pull request validation workflow completed - ready for code review"
