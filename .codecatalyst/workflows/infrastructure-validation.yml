@@ -4,9 +4,9 @@ SchemaVersion: "1.0"
 Triggers:
   - Type: PUSH
     # Run on feature branches for fast feedback during development
-    # Use explicit pattern matching for feature branches
+    # Try pattern without quotes
     Branches:
-      - "feature/**"
+      - feature/*
   - Type: PULLREQUEST
     Branches:
       - main
