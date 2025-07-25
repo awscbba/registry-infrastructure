@@ -3,10 +3,10 @@ SchemaVersion: "1.0"
 
 Triggers:
   - Type: PUSH
-    # Run on feature branch pushes for fast feedback during development
+    # Run on any branch push except main for fast feedback during development
     # Exclude main branch to avoid duplication with deployment workflow
     Branches:
-      - feature/*  # Only feature branches (feature/branch-name pattern)
+      - "!main"  # Exclude main branch, allow all others
   - Type: PULLREQUEST
     Branches:
       - main
@@ -38,10 +38,10 @@ Actions:
             # Set execution mode - always validation for this workflow
             BRANCH_NAME="${CODECATALYST_SOURCE_BRANCH_NAME:-unknown}"
             TRIGGER_TYPE="${CODECATALYST_TRIGGER_TYPE:-PUSH}"
-            
+
             export EXECUTION_MODE="validation"
             export SKIP_DEPLOYMENT="true"
-            
+
             if [ "$TRIGGER_TYPE" = "PULLREQUEST" ]; then
                 echo "🎯 Mode: validation (PR to main)"
             else
