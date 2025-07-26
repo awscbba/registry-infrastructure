@@ -3,10 +3,7 @@ SchemaVersion: "1.0"
 
 Triggers:
   - Type: PUSH
-    # For now, explicitly list the current feature branch
-    # TODO: Find the correct pattern syntax for feature branches
-    Branches:
-      - feature//.*
+    # Run on all branch pushes, handle main branch exclusion in script logic
   - Type: PULLREQUEST
     Branches:
       - main
@@ -38,6 +35,14 @@ Actions:
             # Set execution mode - always validation for this workflow
             BRANCH_NAME="${CODECATALYST_SOURCE_BRANCH_NAME:-unknown}"
             TRIGGER_TYPE="${CODECATALYST_TRIGGER_TYPE:-PUSH}"
+
+            # Skip execution if this is a main branch push (deployment workflow handles it)
+            if [ "$TRIGGER_TYPE" = "PUSH" ] && [ "$BRANCH_NAME" = "main" ]; then
+                echo "⏭️ Skipping validation workflow for main branch push"
+                echo "📋 Main branch pushes are handled by the deployment workflow"
+                echo "✅ Validation workflow completed (skipped for main branch)"
+                exit 0
+            fi
 
             export EXECUTION_MODE="validation"
             export SKIP_DEPLOYMENT="true"
