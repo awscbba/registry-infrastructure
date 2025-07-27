@@ -318,18 +318,21 @@ class PeopleRegisterInfrastructureStack(Stack):
         # 2. Lambda permissions to send emails
         # 3. Environment variables for configuration
 
-        # Authentication Lambda Function - Dedicated for auth operations
+        # ARCHITECTURE NOTE: Lambda Code Deployment
+        # This CDK stack creates the Lambda functions with placeholder code.
+        # The actual FastAPI application code is deployed separately by the registry-api repository
+        # using its own deployment pipeline (uv + zip deployment).
+        # This separation allows:
+        # - Infrastructure team manages AWS resources
+        # - API team manages application code independently
+        # - Faster development cycles for API changes
+
+        # Authentication Lambda Function - Uses main.lambda_handler from registry-api deployment
         auth_lambda = _lambda.Function(
             self, "AuthFunction",
             runtime=_lambda.Runtime.PYTHON_3_9,
-            handler="auth_handler.lambda_handler",
-            code=_lambda.Code.from_asset("lambda", bundling=BundlingOptions(
-                image=_lambda.Runtime.PYTHON_3_9.bundling_image,
-                command=[
-                    "bash", "-c",
-                    "pip install -r requirements.txt -t /asset-output && cp -au . /asset-output"
-                ],
-            )),
+            handler="main.lambda_handler",  # Updated to use main.lambda_handler from registry-api
+            code=_lambda.Code.from_asset("lambda_placeholder"),  # Minimal placeholder - actual code deployed by registry-api
             timeout=Duration.seconds(30),
             memory_size=512,
             environment={
@@ -344,18 +347,12 @@ class PeopleRegisterInfrastructureStack(Stack):
         people_table.grant_read_write_data(auth_lambda)
         audit_logs_table.grant_read_write_data(auth_lambda)
 
-        # Lambda function for the API - Final Enhanced API handler (working version)
+        # Lambda function for the API - Uses main.lambda_handler from registry-api deployment
         api_lambda = _lambda.Function(
             self, "PeopleApiFunction",
             runtime=_lambda.Runtime.PYTHON_3_9,
-            handler="enhanced_api_handler.lambda_handler",  # Final working enhanced handler
-            code=_lambda.Code.from_asset("lambda", bundling=BundlingOptions(
-                image=_lambda.Runtime.PYTHON_3_9.bundling_image,
-                command=[
-                    "bash", "-c",
-                    "pip install -r requirements.txt -t /asset-output && cp -au . /asset-output"
-                ]
-            )),
+            handler="main.lambda_handler",  # Updated to use main.lambda_handler from registry-api
+            code=_lambda.Code.from_asset("lambda_placeholder"),  # Minimal placeholder - actual code deployed by registry-api
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "PROJECTS_TABLE_NAME": projects_table.table_name,
