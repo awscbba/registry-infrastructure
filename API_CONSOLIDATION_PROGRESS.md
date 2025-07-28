@@ -557,11 +557,40 @@ CMD ["main.lambda_handler"]
 - ✅ **Removed Zip Dependencies**: Eliminated zip file extraction and manual packaging
 - ✅ **Modern Health Checks**: Updated to test container-based endpoints
 
-### **Next Steps**
-1. **Fix Router Function**: Ensure proper HTTP event format forwarding
-2. **Test Database Connectivity**: Verify subscriptions endpoint returns data
-3. **Test Public Subscription Endpoint**: Verify end-to-end functionality
-4. **Update Auth Lambda**: Apply same container deployment to auth function
+## 📋 **REMAINING WORK FOR NEXT SESSION**
+
+### **Priority 1: Fix Subscription Endpoint Routing**
+- **Issue**: Router function not forwarding proper HTTP event format to API Lambda
+- **Error**: `The adapter was unable to infer a handler to use for the event`
+- **Solution**: Debug and fix router function event forwarding logic
+- **Expected Result**: `/subscriptions` endpoint returns actual database data
+
+### **Priority 2: Complete Container Infrastructure Migration**
+- **Current**: Only PeopleApiFunction uses container deployment
+- **Needed**: Update ALL Lambda functions to use containers
+  - ✅ PeopleApiFunction (completed)
+  - ❌ AuthFunction (needs container deployment)
+  - ❌ RouterFunction (needs container deployment)
+- **Benefits**: Consistent deployment, no more dependency issues
+
+### **Priority 3: End-to-End Testing**
+- **Test `/subscriptions`**: Verify returns 10+ subscription records
+- **Test `/public/subscribe`**: Verify person creation and subscription flow
+- **Test Frontend Integration**: Verify subscription form works end-to-end
+- **Test Error Handling**: Verify proper error responses
+
+### **Priority 4: Production Readiness**
+- **Update CodeCatalyst Pipeline**: Support container deployment workflow
+- **Update Documentation**: Container deployment best practices
+- **Performance Testing**: Verify container cold start times
+- **Monitoring**: Ensure proper logging and metrics
+
+---
+
+**Session End Status**: 🎉 **MAJOR PROGRESS** - Container deployment working, routing fix needed  
+**Next Session Goal**: Fix router function and complete container migration  
+**Architecture**: RouterFunction → AuthFunction/PeopleApiFunction (all will use containers)  
+**Key Achievement**: Solved Python dependency compatibility with Docker containers
 5. **Test CI/CD Pipeline**: Verify CodeCatalyst workflow works with container deployment
 
 ---
