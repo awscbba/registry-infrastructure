@@ -499,9 +499,67 @@ aws lambda update-function-code --function-name "PeopleRegisterInfrastruct-Peopl
 3. **Test Endpoint After Update**: Verify `/subscriptions` returns database data
 4. **Fix CodeCatalyst Pipeline**: Ensure future deployments work correctly
 
+## 🐳 **CONTAINER DEPLOYMENT IMPLEMENTATION (IN PROGRESS)**
+
+### **Decision 7: Switch to Container-Based Lambda Deployment (ACTIVE)**
+- **Date**: July 28, 2025
+- **Rationale**: Solve dependency compatibility issues between development (Python 3.13) and Lambda (Python 3.9)
+- **Approach**: Use Docker containers with AWS Lambda Python 3.9 base image
+- **Benefits**: Consistent dependencies, no compatibility issues, modern deployment
+
+### **Container Deployment Progress**
+1. ✅ **ECR Repository**: Already exists (`registry-api-lambda`)
+2. ✅ **CDK Infrastructure**: Updated to use container deployment from ECR
+3. ✅ **Docker Container**: Built with Lambda-compatible dependencies
+4. ✅ **Container Push**: Successfully pushed to ECR
+5. ✅ **Lambda Update**: Function updated to use container image
+6. 🔄 **Dependency Resolution**: Still resolving missing dependencies
+
+### **Current Issue: Missing Dependencies**
+- **Error**: `Runtime.ImportModuleError: Unable to import module 'main': No module named...`
+- **Progress**: Added `email-validator==2.1.0` to container
+- **Status**: Still debugging import errors in container
+
+### **Container Configuration**
+```dockerfile
+FROM public.ecr.aws/lambda/python:3.9
+RUN pip install fastapi==0.104.1 mangum==0.17.0 boto3==1.34.144 pydantic==2.5.3 python-jose[cryptography]==3.3.0 passlib[bcrypt]==1.7.4 python-multipart==0.0.6 email-validator==2.1.0
+COPY main.py ./
+COPY src/ ./src/
+CMD ["main.lambda_handler"]
+```
+
+### **Container Deployment Success**
+- ✅ **Dependencies Resolved**: Fixed JWT import issues (PyJWT instead of python-jose)
+- ✅ **Application Loading**: FastAPI app initializes successfully
+- ✅ **Database Service**: DynamoDB service initializes (EmailIndex GSI warnings expected)
+- ✅ **Mangum Integration**: ASGI adapter working
+
+### **Current Issue: Event Format**
+- **Error**: `The adapter was unable to infer a handler to use for the event`
+- **Cause**: Router function may be passing incorrect event format to API Lambda
+- **Status**: Container deployment successful, need to fix routing
+
+### **Final Container Configuration**
+```dockerfile
+FROM public.ecr.aws/lambda/python:3.9
+RUN pip install uv
+COPY pyproject.toml ./
+RUN uv pip install --system --python-version 3.9 fastapi mangum boto3 pydantic PyJWT "passlib[bcrypt]" python-multipart email-validator cryptography
+COPY main.py ./
+COPY src/ ./src/
+CMD ["main.lambda_handler"]
+```
+
+### **Next Steps**
+1. **Fix Router Function**: Ensure proper HTTP event format forwarding
+2. **Test Database Connectivity**: Verify subscriptions endpoint returns data
+3. **Test Public Subscription Endpoint**: Verify end-to-end functionality
+4. **Update Auth Lambda**: Apply same container deployment to auth function
+
 ---
 
-**Status**: 🚨 **LAMBDA CODE DEPLOYMENT ISSUE** - Lambda running old code, needs manual update  
-**Next Action**: Deploy latest registry-api code directly to Lambda function  
-**Architecture**: RouterFunction → AuthFunction/PeopleApiFunction (routing works, Lambda needs code update)  
-**Tools Used**: Docker, ECR, FastAPI, Mangum, uv (Python), devbox (environments), CodeCatalyst (CI/CD)
+**Status**: 🐳 **CONTAINER DEPLOYMENT IN PROGRESS** - Resolving dependency issues in Lambda container  
+**Next Action**: Debug and fix remaining container dependency issues  
+**Architecture**: RouterFunction → AuthFunction/PeopleApiFunction (container-based deployment)  
+**Tools Used**: Docker, ECR, FastAPI, Mangum, AWS Lambda containers, CDK

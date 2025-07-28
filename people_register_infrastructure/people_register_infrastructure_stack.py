@@ -9,6 +9,7 @@ from aws_cdk import (
     aws_s3_deployment as s3deploy,
     aws_iam as iam,
     aws_ses as ses,
+    aws_ecr as ecr,
     Duration,
     RemovalPolicy,
     CfnOutput,
@@ -327,12 +328,17 @@ class PeopleRegisterInfrastructureStack(Stack):
         # - API team manages application code independently
         # - Faster development cycles for API changes
 
-        # Authentication Lambda Function - Uses main.lambda_handler from registry-api deployment
+        # Authentication Lambda Function - Uses container deployment from ECR
         auth_lambda = _lambda.Function(
             self, "AuthFunction",
-            runtime=_lambda.Runtime.PYTHON_3_9,
-            handler="main.lambda_handler",  # Updated to use main.lambda_handler from registry-api
-            code=_lambda.Code.from_asset("lambda_placeholder"),  # Minimal placeholder - actual code deployed by registry-api
+            code=_lambda.Code.from_ecr_image(
+                repository=ecr.Repository.from_repository_name(
+                    self, "AuthLambdaECRRepo", "registry-api-lambda"
+                ),
+                tag="latest"
+            ),
+            handler=_lambda.Handler.FROM_IMAGE,
+            runtime=_lambda.Runtime.FROM_IMAGE,
             timeout=Duration.seconds(30),
             memory_size=512,
             environment={
@@ -347,12 +353,17 @@ class PeopleRegisterInfrastructureStack(Stack):
         people_table.grant_read_write_data(auth_lambda)
         audit_logs_table.grant_read_write_data(auth_lambda)
 
-        # Lambda function for the API - Uses main.lambda_handler from registry-api deployment
+        # Lambda function for the API - Uses container deployment from ECR
         api_lambda = _lambda.Function(
             self, "PeopleApiFunction",
-            runtime=_lambda.Runtime.PYTHON_3_9,
-            handler="main.lambda_handler",  # Updated to use main.lambda_handler from registry-api
-            code=_lambda.Code.from_asset("lambda_placeholder"),  # Minimal placeholder - actual code deployed by registry-api
+            code=_lambda.Code.from_ecr_image(
+                repository=ecr.Repository.from_repository_name(
+                    self, "ApiLambdaECRRepo", "registry-api-lambda"
+                ),
+                tag="latest"
+            ),
+            handler=_lambda.Handler.FROM_IMAGE,
+            runtime=_lambda.Runtime.FROM_IMAGE,
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "PROJECTS_TABLE_NAME": projects_table.table_name,
