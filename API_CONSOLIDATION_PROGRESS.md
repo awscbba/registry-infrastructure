@@ -444,14 +444,27 @@ aws lambda update-function-code --function-name "PeopleRegisterInfrastruct-Peopl
 - ✅ **Public Subscription Logic**: Updated to use /public/subscribe endpoint
 - ✅ **Build & Deploy**: Successfully deployed to CloudFront
 
+### **Current Debugging Status**
+- ✅ **Routing Lambda**: Working correctly, forwarding requests
+- ✅ **API Gateway**: Properly configured with catch-all routes
+- ❌ **API Endpoints**: Returning "Internal server error" and "Not Found"
+- 🔍 **Issue**: `/public/subscribe` endpoint exists in code but not found by FastAPI
+
+### **Debugging Findings**
+1. **Router Function**: Successfully forwards requests (no 401/403 errors)
+2. **API Lambda**: Receiving requests but returning 404 for `/public/subscribe`
+3. **Code Verification**: Endpoint exists in `people_handler.py` at line 2133
+4. **CloudWatch Logs**: Show Lambda initialization but no specific errors
+
 ### **Immediate Next Steps**
-1. **Debug API Endpoints**: Investigate why /health and /public/subscribe return errors
-2. **Test Subscription Flow**: Verify end-to-end subscription functionality
-3. **CloudWatch Analysis**: Check Lambda logs for routing and API issues
+1. **Verify FastAPI Route Registration**: Check if `/public/subscribe` is properly registered
+2. **Test Known Working Endpoints**: Verify which endpoints are actually working
+3. **Check Lambda Environment**: Ensure all environment variables are set correctly
+4. **Test Subscription Flow**: Once endpoint is working, verify end-to-end functionality
 
 ---
 
-**Status**: 🏗️ **ROUTING ARCHITECTURE DEPLOYED** - 3-Lambda system working, debugging endpoint issues  
-**Next Action**: Debug API endpoint errors and test subscription flow  
-**Architecture**: RouterFunction → AuthFunction/PeopleApiFunction  
+**Status**: 🔍 **DEBUGGING ENDPOINT ISSUES** - Routing works, API endpoints need investigation  
+**Next Action**: Verify FastAPI route registration and test endpoint functionality  
+**Architecture**: RouterFunction → AuthFunction/PeopleApiFunction (routing confirmed working)  
 **Tools Used**: Docker, ECR, FastAPI, Mangum, uv (Python), devbox (environments), CodeCatalyst (CI/CD)
