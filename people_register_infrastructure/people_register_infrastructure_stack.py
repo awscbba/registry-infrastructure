@@ -472,6 +472,11 @@ class PeopleRegisterInfrastructureStack(Stack):
         subscription_resource = subscriptions_resource.add_resource("{id}")
         subscription_resource.add_method("DELETE", api_lambda_integration)  # Delete subscription
 
+        # Public resource for anonymous subscription forms
+        public_resource = api.root.add_resource("public")
+        public_subscribe_resource = public_resource.add_resource("subscribe")
+        public_subscribe_resource.add_method("POST", api_lambda_integration)  # Public subscription endpoint
+
         # Admin resource (new)
         admin_resource = api.root.add_resource("admin")
         dashboard_resource = admin_resource.add_resource("dashboard")
