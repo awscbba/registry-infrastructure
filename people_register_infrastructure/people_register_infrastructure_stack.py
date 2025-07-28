@@ -412,99 +412,40 @@ class PeopleRegisterInfrastructureStack(Stack):
             ),
         )
 
-        # Lambda integrations
-        api_lambda_integration = apigateway.LambdaIntegration(
-            api_lambda,
-            request_templates={"application/json": '{"statusCode": "200"}'}
+        # Router Lambda Function - Routes requests to appropriate backend functions
+        # This solves the Lambda policy size limit issue
+        router_lambda = _lambda.Function(
+            self, "RouterFunction",
+            runtime=_lambda.Runtime.PYTHON_3_9,
+            handler="main.lambda_handler",
+            code=_lambda.Code.from_asset("lambda_router"),
+            timeout=Duration.seconds(30),
+            memory_size=256,
+            environment={
+                "AUTH_FUNCTION_NAME": auth_lambda.function_name,
+                "API_FUNCTION_NAME": api_lambda.function_name,
+            }
         )
         
-        auth_lambda_integration = apigateway.LambdaIntegration(
-            auth_lambda,
+        # Grant router permission to invoke other Lambda functions
+        auth_lambda.grant_invoke(router_lambda)
+        api_lambda.grant_invoke(router_lambda)
+        
+        # Single Lambda integration for the router
+        router_integration = apigateway.LambdaIntegration(
+            router_lambda,
             request_templates={"application/json": '{"statusCode": "200"}'}
         )
 
-        # API Gateway routes
-        # Health check
-        health_resource = api.root.add_resource("health")
-        health_resource.add_method("GET", api_lambda_integration)
-
-        # People resource
-        people_resource = api.root.add_resource("people")
-        people_resource.add_method("GET", api_lambda_integration)  # List people
-        people_resource.add_method("POST", api_lambda_integration)  # Create person
-
-        # Individual person resource
-        person_resource = people_resource.add_resource("{id}")
-        person_resource.add_method("GET", api_lambda_integration)  # Get person
-        person_resource.add_method("PUT", api_lambda_integration)  # Update person
-        person_resource.add_method("DELETE", api_lambda_integration)  # Delete person
-
-        # Projects resource (new)
-        projects_resource = api.root.add_resource("projects")
-        projects_resource.add_method("GET", api_lambda_integration)  # List projects
-        projects_resource.add_method("POST", api_lambda_integration)  # Create project
-
-        # Individual project resource
-        project_resource = projects_resource.add_resource("{id}")
-        project_resource.add_method("GET", api_lambda_integration)  # Get project
-        project_resource.add_method("PUT", api_lambda_integration)  # Update project
-        project_resource.add_method("DELETE", api_lambda_integration)  # Delete project
-
-        # Project subscribers
-        subscribers_resource = project_resource.add_resource("subscribers")
-        subscribers_resource.add_method("GET", api_lambda_integration)  # Get project subscribers
-
-        # Project subscription management
-        subscribe_resource = project_resource.add_resource("subscribe")
-        subscribe_person_resource = subscribe_resource.add_resource("{personId}")
-        subscribe_person_resource.add_method("POST", api_lambda_integration)  # Subscribe person to project
-
-        unsubscribe_resource = project_resource.add_resource("unsubscribe")
-        unsubscribe_person_resource = unsubscribe_resource.add_resource("{personId}")
-        unsubscribe_person_resource.add_method("DELETE", api_lambda_integration)  # Unsubscribe person from project
-
-        # Subscriptions resource (new)
-        subscriptions_resource = api.root.add_resource("subscriptions")
-        subscriptions_resource.add_method("GET", api_lambda_integration)  # List subscriptions
-        subscriptions_resource.add_method("POST", api_lambda_integration)  # Create subscription
-
-        # Individual subscription resource
-        subscription_resource = subscriptions_resource.add_resource("{id}")
-        subscription_resource.add_method("DELETE", api_lambda_integration)  # Delete subscription
-
-        # Public resource for anonymous subscription forms
-        public_resource = api.root.add_resource("public")
-        public_subscribe_resource = public_resource.add_resource("subscribe")
-        public_subscribe_resource.add_method("POST", api_lambda_integration)  # Public subscription endpoint
-
-        # Admin resource (new)
-        admin_resource = api.root.add_resource("admin")
-        dashboard_resource = admin_resource.add_resource("dashboard")
-        dashboard_resource.add_method("GET", api_lambda_integration)  # Get admin dashboard
+        # API Gateway routes - Simple routing via Router Lambda
+        # This solves the Lambda policy size limit issue by having minimal API Gateway configuration
         
-        # Password reset cleanup (admin endpoint) - simplified
-        password_reset_admin_resource = admin_resource.add_resource("password-reset")
-        password_reset_admin_resource.add_method("POST", api_lambda_integration)  # Cleanup expired tokens
-
-        # Authentication resource - Using dedicated Auth Lambda
-        auth_resource = api.root.add_resource("auth")
+        # Catch-all resource that forwards all requests to router Lambda
+        proxy_resource = api.root.add_resource("{proxy+}")
+        proxy_resource.add_method("ANY", router_integration)
         
-        # Login endpoint - Using Auth Lambda
-        login_resource = auth_resource.add_resource("login")
-        login_resource.add_method("POST", auth_lambda_integration)
-        
-        # Logout endpoint - Using Auth Lambda
-        logout_resource = auth_resource.add_resource("logout")
-        logout_resource.add_method("POST", auth_lambda_integration)
-        
-        # User profile endpoint - Using Auth Lambda
-        me_resource = auth_resource.add_resource("me")
-        me_resource.add_method("GET", auth_lambda_integration)
-        
-        # Password reset endpoint - Using main API Lambda (for existing functionality)
-        password_reset_resource = auth_resource.add_resource("password-reset")
-        password_reset_resource.add_method("POST", api_lambda_integration)  # All password reset operations
-        password_reset_resource.add_method("GET", api_lambda_integration)   # Token validation via query params
+        # Root level methods (for paths like /health, /auth, etc.)
+        api.root.add_method("ANY", router_integration)
 
         # S3 Bucket for hosting the frontend
         frontend_bucket = s3.Bucket(
