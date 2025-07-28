@@ -444,27 +444,64 @@ aws lambda update-function-code --function-name "PeopleRegisterInfrastruct-Peopl
 - ✅ **Public Subscription Logic**: Updated to use /public/subscribe endpoint
 - ✅ **Build & Deploy**: Successfully deployed to CloudFront
 
+## 🚨 **CRITICAL FINDING: DATABASE CONNECTIVITY ISSUE CONFIRMED**
+
+### **Finding 8: Database Disconnection Issue (ACTIVE INVESTIGATION)**
+- **Date**: July 28, 2025
+- **Problem**: API endpoints returning HTTP 500 "Internal server error"
+- **Root Cause**: Database connectivity issue between Lambda and DynamoDB
+- **Evidence**: 
+  - ✅ **DynamoDB Data Exists**: `aws dynamodb scan --table-name SubscriptionsTable` shows 10 items
+  - ❌ **API Returns Empty**: `/subscriptions` endpoint returns "Internal server error"
+  - ✅ **Environment Variables**: Lambda has correct table names configured
+  - ❌ **Table Initialization**: Likely failing silently in Lambda
+
+### **Database Connectivity Analysis**
+1. **DynamoDB Tables**: All tables exist and contain data
+   - `SubscriptionsTable`: 10 items confirmed
+   - `PeopleTable`, `ProjectsTable`: Also populated
+2. **Lambda Configuration**: Environment variables correctly set
+   - `SUBSCRIPTIONS_TABLE_NAME`: "SubscriptionsTable" ✅
+   - `PEOPLE_TABLE_NAME`: "PeopleTable" ✅
+   - `PROJECTS_TABLE_NAME`: "ProjectsTable" ✅
+3. **Code Analysis**: `get_all_subscriptions()` method looks correct
+   - Returns empty list if `self.subscriptions_table` is None
+   - This suggests table initialization is failing
+
 ### **Current Debugging Status**
 - ✅ **Routing Lambda**: Working correctly, forwarding requests
-- ✅ **API Gateway**: Properly configured with catch-all routes
-- ❌ **API Endpoints**: Returning "Internal server error" and "Not Found"
-- 🔍 **Issue**: `/public/subscribe` endpoint exists in code but not found by FastAPI
+- ✅ **API Gateway**: Properly configured with catch-all routes  
+- ✅ **DynamoDB Tables**: Exist and contain data
+- ❌ **Lambda-DynamoDB Connection**: Failing during table initialization
+- 🔍 **Issue**: `self.subscriptions_table` likely None due to initialization failure
 
 ### **Debugging Findings**
 1. **Router Function**: Successfully forwards requests (no 401/403 errors)
-2. **API Lambda**: Receiving requests but returning 404 for `/public/subscribe`
-3. **Code Verification**: Endpoint exists in `people_handler.py` at line 2133
-4. **CloudWatch Logs**: Show Lambda initialization but no specific errors
+2. **API Lambda**: Receiving requests but database service failing
+3. **Table Initialization**: Error handling catches failures, sets tables to None
+4. **Silent Failure**: No visible errors in logs, but database operations fail
+
+### **Lambda Logs Analysis**
+- ✅ **Lambda Initialization**: Successful with EmailIndex GSI warnings
+- ✅ **Request Processing**: Requests complete in 3-7ms (too fast)
+- ❌ **Application Logs**: No FastAPI application logs visible
+- 🔍 **Hypothesis**: Lambda running old code without modern FastAPI implementation
+
+### **Critical Discovery: Code Deployment Issue**
+- **Evidence**: Lambda requests complete in 3-7ms with no application logs
+- **Expected**: FastAPI application should log request processing
+- **Conclusion**: Lambda likely running outdated code without `/subscriptions` endpoint
+- **Root Cause**: CodeCatalyst deployment may have failed to update Lambda code
 
 ### **Immediate Next Steps**
-1. **Verify FastAPI Route Registration**: Check if `/public/subscribe` is properly registered
-2. **Test Known Working Endpoints**: Verify which endpoints are actually working
-3. **Check Lambda Environment**: Ensure all environment variables are set correctly
-4. **Test Subscription Flow**: Once endpoint is working, verify end-to-end functionality
+1. **Verify Lambda Code Version**: Check when Lambda was last updated
+2. **Manual Code Deployment**: Deploy latest registry-api code directly to Lambda
+3. **Test Endpoint After Update**: Verify `/subscriptions` returns database data
+4. **Fix CodeCatalyst Pipeline**: Ensure future deployments work correctly
 
 ---
 
-**Status**: 🔍 **DEBUGGING ENDPOINT ISSUES** - Routing works, API endpoints need investigation  
-**Next Action**: Verify FastAPI route registration and test endpoint functionality  
-**Architecture**: RouterFunction → AuthFunction/PeopleApiFunction (routing confirmed working)  
+**Status**: 🚨 **LAMBDA CODE DEPLOYMENT ISSUE** - Lambda running old code, needs manual update  
+**Next Action**: Deploy latest registry-api code directly to Lambda function  
+**Architecture**: RouterFunction → AuthFunction/PeopleApiFunction (routing works, Lambda needs code update)  
 **Tools Used**: Docker, ECR, FastAPI, Mangum, uv (Python), devbox (environments), CodeCatalyst (CI/CD)
