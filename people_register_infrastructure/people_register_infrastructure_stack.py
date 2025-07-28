@@ -423,13 +423,17 @@ class PeopleRegisterInfrastructureStack(Stack):
             ),
         )
 
-        # Router Lambda Function - Routes requests to appropriate backend functions
-        # This solves the Lambda policy size limit issue
+        # Router Lambda Function - Uses container deployment from ECR
         router_lambda = _lambda.Function(
             self, "RouterFunction",
-            runtime=_lambda.Runtime.PYTHON_3_9,
-            handler="main.lambda_handler",
-            code=_lambda.Code.from_asset("lambda_router"),
+            code=_lambda.Code.from_ecr_image(
+                repository=ecr.Repository.from_repository_name(
+                    self, "RouterLambdaECRRepo", "registry-router-lambda"
+                ),
+                tag="latest"
+            ),
+            handler=_lambda.Handler.FROM_IMAGE,
+            runtime=_lambda.Runtime.FROM_IMAGE,
             timeout=Duration.seconds(30),
             memory_size=256,
             environment={

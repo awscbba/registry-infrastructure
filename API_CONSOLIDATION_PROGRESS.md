@@ -557,27 +557,46 @@ CMD ["main.lambda_handler"]
 - ✅ **Removed Zip Dependencies**: Eliminated zip file extraction and manual packaging
 - ✅ **Modern Health Checks**: Updated to test container-based endpoints
 
-## 📋 **REMAINING WORK FOR NEXT SESSION**
+## 🎉 **MAJOR SUCCESS: SUBSCRIPTION ENDPOINT ROUTING FIXED!**
 
-### **Priority 1: Fix Subscription Endpoint Routing**
-- **Issue**: Router function not forwarding proper HTTP event format to API Lambda
-- **Error**: `The adapter was unable to infer a handler to use for the event`
-- **Solution**: Debug and fix router function event forwarding logic
-- **Expected Result**: `/subscriptions` endpoint returns actual database data
+### **Priority 1: Fix Subscription Endpoint Routing (COMPLETED)**
+- **Issue**: Router function not forwarding proper HTTP event format to API Lambda ✅ **SOLVED**
+- **Root Cause**: API Gateway deployment was stale and needed refresh
+- **Solution**: Created new API Gateway deployment (`aws apigateway create-deployment`)
+- **Result**: `/subscriptions` endpoint now returns all 10 subscription records perfectly!
 
-### **Priority 2: Complete Container Infrastructure Migration**
-- **Current**: Only PeopleApiFunction uses container deployment
-- **Needed**: Update ALL Lambda functions to use containers
-  - ✅ PeopleApiFunction (completed)
-  - ❌ AuthFunction (needs container deployment)
-  - ❌ RouterFunction (needs container deployment)
-- **Benefits**: Consistent deployment, no more dependency issues
+### **Routing Success Metrics**
+- ✅ **Router Function**: Properly receives and processes API Gateway events
+- ✅ **Path Extraction**: Correctly extracts `/subscriptions` and `/public/subscribe` paths
+- ✅ **Function Routing**: Routes non-auth requests to PeopleApiFunction correctly
+- ✅ **Lambda Invocation**: Successfully invokes API Lambda with proper payload
+- ✅ **Database Connectivity**: Returns actual subscription data from DynamoDB
+- ✅ **Public Subscribe**: Endpoint reached and processes POST requests (minor code bug remains)
 
-### **Priority 3: End-to-End Testing**
-- **Test `/subscriptions`**: Verify returns 10+ subscription records
-- **Test `/public/subscribe`**: Verify person creation and subscription flow
-- **Test Frontend Integration**: Verify subscription form works end-to-end
-- **Test Error Handling**: Verify proper error responses
+### **Priority 2: Complete Container Infrastructure Migration (COMPLETED)**
+- **Achievement**: ALL Lambda functions now use container deployment! 🎉
+- **Migration Results**:
+  - ✅ **PeopleApiFunction**: Container deployment (registry-api-lambda)
+  - ✅ **AuthFunction**: Container deployment (registry-api-lambda) 
+  - ✅ **RouterFunction**: Container deployment (registry-router-lambda)
+- **Benefits Achieved**: 
+  - ✅ Consistent deployment architecture across all functions
+  - ✅ No more Python dependency compatibility issues
+  - ✅ Modern container-based serverless deployment
+  - ✅ Simplified maintenance and updates
+
+### **Priority 3: Fix Subscription Creation Bug (COMPLETED)**
+- **Issue**: Async/await errors in `/public/subscribe` endpoint ✅ **FIXED**
+- **Errors Resolved**:
+  - ✅ `'coroutine' object is not subscriptable`
+  - ✅ `RuntimeWarning: coroutine 'DynamoDBService.get_person_by_email' was never awaited`
+  - ✅ `'dict' object has no attribute 'model_dump'`
+- **Fixes Applied**:
+  - ✅ Added missing `await` for `get_person_by_email()` call
+  - ✅ Added missing `await` for `create_person()` call  
+  - ✅ Fixed model type issue (pass PersonCreate object, not dictionary)
+- **Current Status**: Async/await logic working correctly
+- **Remaining**: Minor DynamoDB permissions issue (separate from async bug)
 
 ### **Priority 4: Production Readiness**
 - **Update CodeCatalyst Pipeline**: Support container deployment workflow
@@ -587,10 +606,27 @@ CMD ["main.lambda_handler"]
 
 ---
 
-**Session End Status**: 🎉 **MAJOR PROGRESS** - Container deployment working, routing fix needed  
-**Next Session Goal**: Fix router function and complete container migration  
-**Architecture**: RouterFunction → AuthFunction/PeopleApiFunction (all will use containers)  
-**Key Achievement**: Solved Python dependency compatibility with Docker containers
+## 🏆 **SESSION COMPLETE: ROUTING AND CONTAINER DEPLOYMENT SUCCESS**
+
+**Current Status**: 🎉 **ROUTING FIXED & CONTAINER DEPLOYMENT WORKING**  
+**Major Achievements**: 
+- ✅ Container-based Lambda deployment successful
+- ✅ Router function working perfectly  
+- ✅ Subscriptions endpoint returning real data
+- ✅ Public subscribe endpoint routing correctly
+
+**Current Session Goals**: 
+- ✅ Complete container migration for Auth and Router functions (COMPLETED!)
+- ✅ Fix minor async/await bug in subscription creation (COMPLETED!)
+- 🔄 End-to-end testing and production readiness (READY)
+
+**Outstanding Items**:
+- 🔧 DynamoDB EmailIndex GSI permissions (infrastructure configuration)
+- 🧪 Comprehensive end-to-end testing
+- 🚀 Production readiness checklist
+
+**Architecture**: RouterFunction → AuthFunction/PeopleApiFunction (ALL using container deployment!)  
+**Key Breakthrough**: Complete container migration achieved - modern serverless architecture
 5. **Test CI/CD Pipeline**: Verify CodeCatalyst workflow works with container deployment
 
 ---
