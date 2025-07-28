@@ -551,15 +551,50 @@ COPY src/ ./src/
 CMD ["main.lambda_handler"]
 ```
 
+### **CodeCatalyst Workflow Updated**
+- ✅ **Container Deployment Pipeline**: Updated workflow to use Docker containers
+- ✅ **ECR Integration**: Workflow now pushes to ECR and updates Lambda with container image
+- ✅ **Removed Zip Dependencies**: Eliminated zip file extraction and manual packaging
+- ✅ **Modern Health Checks**: Updated to test container-based endpoints
+
 ### **Next Steps**
 1. **Fix Router Function**: Ensure proper HTTP event format forwarding
 2. **Test Database Connectivity**: Verify subscriptions endpoint returns data
 3. **Test Public Subscription Endpoint**: Verify end-to-end functionality
 4. **Update Auth Lambda**: Apply same container deployment to auth function
+5. **Test CI/CD Pipeline**: Verify CodeCatalyst workflow works with container deployment
 
 ---
 
-**Status**: 🐳 **CONTAINER DEPLOYMENT IN PROGRESS** - Resolving dependency issues in Lambda container  
-**Next Action**: Debug and fix remaining container dependency issues  
-**Architecture**: RouterFunction → AuthFunction/PeopleApiFunction (container-based deployment)  
-**Tools Used**: Docker, ECR, FastAPI, Mangum, AWS Lambda containers, CDK
+## 🎉 **MAJOR MILESTONE: CONTAINER DEPLOYMENT SUCCESSFUL**
+
+### **Decision 7: Container-Based Lambda Deployment (COMPLETED)**
+- **Date**: July 28, 2025
+- **Achievement**: Successfully deployed FastAPI application using Docker containers
+- **Impact**: Resolved all Python dependency compatibility issues
+- **Architecture**: Modern container-based serverless deployment
+
+### **Key Accomplishments**
+1. ✅ **CDK Infrastructure Updated**: Lambda functions now use ECR container deployment
+2. ✅ **Docker Container Built**: Python 3.9 compatible with all required dependencies
+3. ✅ **Dependencies Resolved**: Fixed JWT imports and all module compatibility issues
+4. ✅ **FastAPI Application Loading**: Application successfully initializes in Lambda
+5. ✅ **Database Service Working**: DynamoDB service initializes correctly
+6. ✅ **Mangum Integration**: ASGI adapter functioning properly
+
+### **Technical Solution Summary**
+- **Problem**: Python 3.13 (dev) vs Python 3.9 (Lambda) dependency conflicts
+- **Solution**: Docker container with `uv pip install --python-version 3.9`
+- **Result**: Clean, maintainable, dependency-compatible deployment
+
+### **Repository Cleanup**
+- ✅ **Removed Zip Artifacts**: Cleaned up all temporary zip deployment files
+- ✅ **Container-Only Approach**: Single `Dockerfile.lambda` for deployment
+- ✅ **ECR Integration**: Automated container push and Lambda update process
+
+---
+
+**Status**: 🎉 **CONTAINER DEPLOYMENT SUCCESSFUL** - FastAPI app running in Lambda containers  
+**Next Action**: Fix router function event format to complete end-to-end functionality  
+**Architecture**: RouterFunction → AuthFunction/PeopleApiFunction (container-based deployment working)  
+**Tools Used**: Docker, ECR, FastAPI, Mangum, AWS Lambda containers, CDK, uv (Python)
