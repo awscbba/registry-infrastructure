@@ -37,6 +37,16 @@ class PeopleRegisterInfrastructureStack(Stack):
             point_in_time_recovery=True,
         )
 
+        # Add GSI for querying people by email (required for uniqueness checks)
+        people_table.add_global_secondary_index(
+            index_name="EmailIndex",
+            partition_key=dynamodb.Attribute(
+                name="email",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+        )
+
         # DynamoDB Table for storing projects
         projects_table = dynamodb.Table(
             self, "ProjectsTable",
