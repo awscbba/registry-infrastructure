@@ -34,7 +34,7 @@ class PeopleRegisterInfrastructureStack(Stack):
             ),
             billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
             removal_policy=RemovalPolicy.DESTROY,  # Use RETAIN for production
-            point_in_time_recovery=True,
+            # point_in_time_recovery=True,  # Temporarily disabled due to CDK API changes
         )
 
         # Add GSI for querying people by email (required for uniqueness checks)
@@ -44,7 +44,6 @@ class PeopleRegisterInfrastructureStack(Stack):
                 name="email",
                 type=dynamodb.AttributeType.STRING
             ),
-            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
         )
 
         # DynamoDB Table for storing projects
