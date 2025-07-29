@@ -41,9 +41,21 @@ Actions:
             # CDK Synthesis Check with Node.js warning handling
             echo "🔄 CDK Synthesis Check..."
 
-            # Install CDK and dependencies (use version that works with Node 18)
-            echo "Installing CDK (compatible with Node 18)..."
-            npm install -g aws-cdk@2.100.0 > /dev/null 2>&1
+            # Install Node 20 and CDK (bypass Node 18 limitation)
+            echo "Installing Node 20 and CDK..."
+            
+            # Install Node 20 using NodeSource repository
+            curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash - > /dev/null 2>&1
+            sudo apt-get install -y nodejs > /dev/null 2>&1
+            
+            # Verify Node version
+            echo "Node version: $(node --version)"
+            echo "NPM version: $(npm --version)"
+            
+            # Install CDK with Node 20
+            npm install -g aws-cdk@latest > /dev/null 2>&1
+            
+            # Setup Python environment
             python3 -m venv .venv > /dev/null 2>&1
             source .venv/bin/activate
             pip install -r requirements.txt > /dev/null 2>&1
