@@ -8,62 +8,8 @@ Triggers:
   - Type: MANUAL
 
 Actions:
-  CheckAPISync:
-    Identifier: aws/build@v1
-    Compute:
-      Type: EC2
-    Environment:
-      Connections:
-        - Role: CodeCatalystWorkflowDevelopmentRole-AWSCocha
-          Name: "142728997126"
-      Name: AWS
-    Inputs:
-      Sources:
-        - WorkflowSource
-    Configuration:
-      Steps:
-        - Run: |
-            echo "🔍 Checking API Code Synchronization"
-            echo "==================================="
-            echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
-            echo ""
-
-            # Set execution mode - always deployment for main branch
-            export EXECUTION_MODE="deployment"
-            export SKIP_DEPLOYMENT="false"
-            echo "🎯 Mode: deployment (main branch push)"
-
-            # Check for API sync
-            if [ -f "lambda/main.py" ] && [ -d "lambda/src" ]; then
-                echo "✅ API code synchronized from registry-api repository"
-                API_SYNC_DETECTED="true"
-            else
-                echo "ℹ️ No API sync detected - using existing lambda handlers"
-                API_SYNC_DETECTED="false"
-            fi
-
-            # Create deployment context
-            echo "{" > deployment-context.json
-            echo "  \"execution_mode\": \"$EXECUTION_MODE\"," >> deployment-context.json
-            echo "  \"api_sync_detected\": \"$API_SYNC_DETECTED\"," >> deployment-context.json
-            echo "  \"skip_deployment\": \"$SKIP_DEPLOYMENT\"," >> deployment-context.json
-            echo "  \"timestamp\": \"$(date -u +%Y-%m-%dT%H:%M:%SZ)\"" >> deployment-context.json
-            echo "}" >> deployment-context.json
-
-            echo "✅ API sync check completed"
-      Container:
-        Registry: CODECATALYST
-        Image: CodeCatalystLinux_x86_64:2024_03
-    Outputs:
-      Artifacts:
-        - Name: deploymentContext
-          Files:
-            - "deployment-context.json"
-
   ValidateInfrastructure:
     Identifier: aws/build@v1
-    DependsOn:
-      - CheckAPISync
     Compute:
       Type: EC2
     Environment:
@@ -74,8 +20,6 @@ Actions:
     Inputs:
       Sources:
         - WorkflowSource
-      Artifacts:
-        - deploymentContext
     Configuration:
       Steps:
         - Run: |
