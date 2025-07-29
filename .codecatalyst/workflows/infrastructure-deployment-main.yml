@@ -84,16 +84,22 @@ Actions:
             echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo ""
 
-            # Read execution mode from context
-            EXECUTION_MODE=$(jq -r '.execution_mode' deployment-context.json)
+            # Read execution mode from context (with fallback)
+            if [ -f "deployment-context.json" ]; then
+                EXECUTION_MODE=$(jq -r '.execution_mode' deployment-context.json)
+            else
+                echo "⚠️ deployment-context.json not found, using default mode"
+                EXECUTION_MODE="deployment"
+            fi
             echo "🎯 Mode: $EXECUTION_MODE"
             echo ""
 
             # CDK Synthesis Check with Node.js warning handling
             echo "🔄 CDK Synthesis Check..."
 
-            # Install CDK and dependencies (use older version that supports Node 18)
-            npm install -g aws-cdk@2.60.0 > /dev/null 2>&1
+            # Install CDK and dependencies (use version that works with Node 18)
+            echo "Installing CDK (compatible with Node 18)..."
+            npm install -g aws-cdk@2.100.0 > /dev/null 2>&1
             python3 -m venv .venv > /dev/null 2>&1
             source .venv/bin/activate
             pip install -r requirements.txt > /dev/null 2>&1
@@ -101,11 +107,14 @@ Actions:
             # Suppress Node.js end-of-life warnings for CDK
             export CDK_DISABLE_VERSION_CHECK=1
             export NODE_NO_WARNINGS=1
+            export NODE_OPTIONS="--no-warnings"
 
             # Run CDK synthesis with intelligent error handling
             echo "Running CDK synthesis..."
+            set +e  # Don't exit on error immediately
             cdk synth > cdk-synth-output.txt 2>cdk-synth-errors.txt
             CDK_EXIT_CODE=$?
+            set -e  # Re-enable exit on error
 
             # Check if the failure is just due to Node.js warnings
             if [ $CDK_EXIT_CODE -eq 0 ]; then
@@ -198,7 +207,8 @@ Actions:
             echo "🚀 Proceeding with infrastructure deployment..."
 
             # Set up CDK environment
-            npm install -g aws-cdk@2.60.0 > /dev/null 2>&1
+            echo "Installing CDK (compatible with Node 18)..."
+            npm install -g aws-cdk@2.100.0 > /dev/null 2>&1
             python3 -m venv .venv > /dev/null 2>&1
             source .venv/bin/activate
             pip install -r requirements.txt > /dev/null 2>&1
@@ -206,6 +216,7 @@ Actions:
             # Suppress Node.js warnings
             export CDK_DISABLE_VERSION_CHECK=1
             export NODE_NO_WARNINGS=1
+            export NODE_OPTIONS="--no-warnings"
 
             # First, check what needs to be deployed
             echo "Checking for infrastructure changes..."
