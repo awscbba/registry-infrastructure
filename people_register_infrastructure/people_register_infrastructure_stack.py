@@ -271,6 +271,20 @@ class PeopleRegisterInfrastructureStack(Stack):
             point_in_time_recovery=True,
         )
 
+        # DynamoDB Table for account lockout tracking
+        account_lockout_table = dynamodb.Table(
+            self, "AccountLockoutTable",
+            table_name="AccountLockoutTable",
+            partition_key=dynamodb.Attribute(
+                name="personId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery=True,
+            time_to_live_attribute="ttl"  # Auto-cleanup old lockout records
+        )
+
         # Add GSI for querying audit logs by person
         audit_logs_table.add_global_secondary_index(
             index_name="PersonIndex",
@@ -379,6 +393,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "SUBSCRIPTIONS_TABLE_NAME": subscriptions_table.table_name,
                 "PASSWORD_RESET_TOKENS_TABLE_NAME": password_reset_tokens_table.table_name,
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
+                "LOCKOUT_TABLE_NAME": account_lockout_table.table_name,
                 "EMAIL_TRACKING_TABLE": email_tracking_table.table_name,
                 "PASSWORD_HISTORY_TABLE": password_history_table.table_name,
                 "SESSION_TRACKING_TABLE": session_tracking_table.table_name,
@@ -398,6 +413,7 @@ class PeopleRegisterInfrastructureStack(Stack):
         subscriptions_table.grant_read_write_data(api_lambda)
         password_reset_tokens_table.grant_read_write_data(api_lambda)
         audit_logs_table.grant_read_write_data(api_lambda)
+        account_lockout_table.grant_read_write_data(api_lambda)
         email_tracking_table.grant_read_write_data(api_lambda)
         password_history_table.grant_read_write_data(api_lambda)
         session_tracking_table.grant_read_write_data(api_lambda)
