@@ -28,13 +28,8 @@ Actions:
             echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo ""
 
-            # Read execution mode from context (with fallback)
-            if [ -f "deployment-context.json" ]; then
-                EXECUTION_MODE=$(jq -r '.execution_mode' deployment-context.json)
-            else
-                echo "⚠️ deployment-context.json not found, using default mode"
-                EXECUTION_MODE="deployment"
-            fi
+            # This workflow runs on main branch, so use deployment mode
+            EXECUTION_MODE="deployment"
             echo "🎯 Mode: $EXECUTION_MODE"
             echo ""
 
@@ -146,7 +141,6 @@ Actions:
       Sources:
         - WorkflowSource
       Artifacts:
-        - deploymentContext
         - validationResults
     Configuration:
       Steps:
@@ -156,15 +150,9 @@ Actions:
             echo "📅 Stage Start: $(date -u +%Y-%m-%dT%H:%M:%SZ)"
             echo ""
 
-            # Read execution mode from context (with fallback)
-            if [ -f "deployment-context.json" ]; then
-                EXECUTION_MODE=$(jq -r '.execution_mode' deployment-context.json)
-                SKIP_DEPLOYMENT=$(jq -r '.skip_deployment' deployment-context.json)
-            else
-                # This workflow only runs on main, so always deploy
-                EXECUTION_MODE="deployment"
-                SKIP_DEPLOYMENT="false"
-            fi
+            # This workflow only runs on main, so always deploy
+            EXECUTION_MODE="deployment"
+            SKIP_DEPLOYMENT="false"
 
             echo "🎯 Mode: $EXECUTION_MODE"
             echo "🔄 Skip Deployment: $SKIP_DEPLOYMENT"
