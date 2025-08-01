@@ -49,14 +49,14 @@ def create_admin_user():
         'email': admin_email,
         'firstName': 'Admin',
         'lastName': 'User',
-        'password': hash_password(admin_password),
+        'password_hash': hash_password(admin_password),
         'phone': '+591 00000000',
         'dateOfBirth': '1990-01-01',
         'address': {
             'street': 'Admin Street',
             'city': 'Cochabamba',
             'state': 'Cochabamba',
-            'postalCode': '0000',
+            'zipCode': '0000',
             'country': 'Bolivia'
         },
         'createdAt': datetime.utcnow().isoformat(),
