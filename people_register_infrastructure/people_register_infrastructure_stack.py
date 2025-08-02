@@ -505,6 +505,37 @@ class PeopleRegisterInfrastructureStack(Stack):
         # Grant CloudFront access to S3 bucket
         frontend_bucket.grant_read(origin_access_identity)
 
+        # CloudFront Function for URL rewriting to support clean URLs
+        url_rewrite_function = cloudfront.Function(
+            self, "UrlRewriteFunction",
+            code=cloudfront.FunctionCode.from_inline("""
+function handler(event) {
+    var request = event.request;
+    var uri = request.uri;
+    
+    // Handle root path
+    if (uri === '/') {
+        return request;
+    }
+    
+    // If URI doesn't have an extension and doesn't end with /
+    if (!uri.includes('.') && !uri.endsWith('/')) {
+        // Check if it's a known directory path
+        if (uri === '/admin' || uri.startsWith('/subscribe/')) {
+            request.uri = uri + '/index.html';
+        }
+    }
+    // If URI ends with / but isn't root
+    else if (uri.endsWith('/') && uri !== '/') {
+        request.uri = uri + 'index.html';
+    }
+    
+    return request;
+}
+            """),
+            comment="Rewrites URLs to serve index.html files for static site routing"
+        )
+
         # CloudFront Distribution
         distribution = cloudfront.Distribution(
             self, "FrontendDistribution",
@@ -517,10 +548,16 @@ class PeopleRegisterInfrastructureStack(Stack):
                 allowed_methods=cloudfront.AllowedMethods.ALLOW_GET_HEAD,
                 cached_methods=cloudfront.CachedMethods.CACHE_GET_HEAD,
                 cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                function_associations=[
+                    cloudfront.FunctionAssociation(
+                        function=url_rewrite_function,
+                        event_type=cloudfront.FunctionEventType.VIEWER_REQUEST
+                    )
+                ]
             ),
             default_root_object="index.html",
             # Removed error_responses to allow proper static site routing
-            # This allows /admin/ and /subscribe/project-name/ to work correctly
+            # Added CloudFront Function to handle clean URLs automatically
             price_class=cloudfront.PriceClass.PRICE_CLASS_100,
         )
 
