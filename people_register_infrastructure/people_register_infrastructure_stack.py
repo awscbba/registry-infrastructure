@@ -519,14 +519,8 @@ class PeopleRegisterInfrastructureStack(Stack):
                 cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
             ),
             default_root_object="index.html",
-            error_responses=[
-                cloudfront.ErrorResponse(
-                    http_status=404,
-                    response_http_status=200,
-                    response_page_path="/index.html",
-                    ttl=Duration.minutes(30),
-                )
-            ],
+            # Removed error_responses to allow proper static site routing
+            # This allows /admin/ and /subscribe/project-name/ to work correctly
             price_class=cloudfront.PriceClass.PRICE_CLASS_100,
         )
 
