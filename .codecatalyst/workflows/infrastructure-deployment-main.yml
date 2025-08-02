@@ -161,11 +161,14 @@ Actions:
             echo "🚀 Proceeding with infrastructure deployment..."
 
             # Set up CDK environment
-            echo "Installing CDK (compatible with Node 18)..."
-            npm install -g aws-cdk@2.100.0 > /dev/null 2>&1
-            python3 -m venv .venv > /dev/null 2>&1
+            echo "Installing CDK (latest version)..."
+            npm install -g aws-cdk@latest
+            
+            # Setup Python environment with better error handling
+            echo "Setting up Python environment..."
+            python3 -m venv .venv
             source .venv/bin/activate
-            pip install -r requirements.txt > /dev/null 2>&1
+            pip install -r requirements.txt
 
             # Suppress Node.js warnings
             export CDK_DISABLE_VERSION_CHECK=1
@@ -179,11 +182,15 @@ Actions:
             # Deploy infrastructure with intelligent error handling
             echo "Deploying CDK stacks..."
 
-            # Try deployment with better error handling
+            # Try deployment with better error handling and verbose output
             set +e  # Don't exit on error
-            cdk deploy --all --require-approval never > deployment-output.txt 2>deployment-errors.txt
+            echo "Running: cdk deploy --all --require-approval never"
+            cdk deploy --all --require-approval never 2>&1 | tee deployment-output.txt
             DEPLOY_EXIT_CODE=$?
             set -e  # Re-enable exit on error
+            
+            # Also capture just errors for analysis
+            grep -i "error\|failed\|exception" deployment-output.txt > deployment-errors.txt || true
 
             # Enhanced success detection logic
             echo "Analyzing deployment results..."
