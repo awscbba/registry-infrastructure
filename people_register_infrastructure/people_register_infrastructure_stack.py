@@ -521,7 +521,7 @@ function handler(event) {
     // If URI doesn't have an extension and doesn't end with /
     if (!uri.includes('.') && !uri.endsWith('/')) {
         // Check if it's a known directory path
-        if (uri === '/admin' || uri.startsWith('/subscribe/')) {
+        if (uri === '/admin' || uri === '/login' || uri === '/dashboard' || uri.startsWith('/subscribe/')) {
             request.uri = uri + '/index.html';
         }
     }
