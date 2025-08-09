@@ -396,6 +396,26 @@ class PeopleRegisterInfrastructureStack(Stack):
         # Grant permissions to Auth Lambda
         people_table.grant_read_write_data(auth_lambda)
         audit_logs_table.grant_read_write_data(auth_lambda)
+        
+        # Add explicit permissions for GSI operations (EmailIndex) for auth lambda
+        auth_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "dynamodb:Query",
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:Scan"
+                ],
+                resources=[
+                    people_table.table_arn + "/index/*",
+                    audit_logs_table.table_arn + "/index/*",
+                    f"arn:aws:dynamodb:{self.region}:{self.account}:table/*/index/*"
+                ]
+            )
+        )
 
         # Lambda function for the API - Uses container deployment from ECR
         api_lambda = _lambda.Function(
@@ -441,6 +461,26 @@ class PeopleRegisterInfrastructureStack(Stack):
         session_tracking_table.grant_read_write_data(api_lambda)
         rate_limit_table.grant_read_write_data(api_lambda)
         csrf_token_table.grant_read_write_data(api_lambda)
+        
+        # Add explicit permissions for GSI operations (EmailIndex)
+        api_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "dynamodb:Query",
+                    "dynamodb:GetItem",
+                    "dynamodb:PutItem",
+                    "dynamodb:UpdateItem",
+                    "dynamodb:DeleteItem",
+                    "dynamodb:Scan"
+                ],
+                resources=[
+                    people_table.table_arn + "/index/*",
+                    password_reset_tokens_table.table_arn + "/index/*",
+                    f"arn:aws:dynamodb:{self.region}:{self.account}:table/*/index/*"
+                ]
+            )
+        )
         
         # Grant Lambda permissions to send emails via SES
         api_lambda.add_to_role_policy(
