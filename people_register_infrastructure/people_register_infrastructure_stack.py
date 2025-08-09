@@ -364,11 +364,13 @@ class PeopleRegisterInfrastructureStack(Stack):
             runtime=_lambda.Runtime.FROM_IMAGE,
             timeout=Duration.seconds(30),
             memory_size=512,
+            tracing=_lambda.Tracing.ACTIVE,  # Enable X-Ray tracing
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
                 "JWT_SECRET": "your-jwt-secret-change-in-production-please",
-                "JWT_EXPIRATION_HOURS": "24"
+                "JWT_EXPIRATION_HOURS": "24",
+                "_X_AMZN_TRACE_ID": ""  # X-Ray environment variable
             }
         )
         
@@ -387,6 +389,7 @@ class PeopleRegisterInfrastructureStack(Stack):
             ),
             handler=_lambda.Handler.FROM_IMAGE,
             runtime=_lambda.Runtime.FROM_IMAGE,
+            tracing=_lambda.Tracing.ACTIVE,  # Enable X-Ray tracing
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "PROJECTS_TABLE_NAME": projects_table.table_name,
@@ -402,6 +405,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "CSRF_SECRET": "production-csrf-secret-change-this-value",  # Change in production
                 "SES_FROM_EMAIL": "noreply@cbba.cloud.org.bo",  # Production verified domain email
                 "FRONTEND_URL": "https://d28z2il3z2vmpc.cloudfront.net",  # Will be updated after CloudFront creation
+                "_X_AMZN_TRACE_ID": ""  # X-Ray environment variable
             },
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -461,9 +465,11 @@ class PeopleRegisterInfrastructureStack(Stack):
             runtime=_lambda.Runtime.FROM_IMAGE,
             timeout=Duration.seconds(30),
             memory_size=256,
+            tracing=_lambda.Tracing.ACTIVE,  # Enable X-Ray tracing
             environment={
                 "AUTH_FUNCTION_NAME": auth_lambda.function_name,
                 "API_FUNCTION_NAME": api_lambda.function_name,
+                "_X_AMZN_TRACE_ID": ""  # X-Ray environment variable
             }
         )
         
