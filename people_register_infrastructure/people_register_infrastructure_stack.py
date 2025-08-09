@@ -378,7 +378,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 repository=ecr.Repository.from_repository_name(
                     self, "AuthLambdaECRRepo", "registry-api-lambda"
                 ),
-                tag="latest"
+                tag_or_digest="latest"
             ),
             handler=_lambda.Handler.FROM_IMAGE,
             runtime=_lambda.Runtime.FROM_IMAGE,
@@ -390,7 +390,6 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
                 "JWT_SECRET": "your-jwt-secret-change-in-production-please",
                 "JWT_EXPIRATION_HOURS": "24",
-                "_X_AMZN_TRACE_ID": ""  # X-Ray environment variable
             }
         )
         
@@ -405,7 +404,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 repository=ecr.Repository.from_repository_name(
                     self, "ApiLambdaECRRepo", "registry-api-lambda"
                 ),
-                tag="latest"
+                tag_or_digest="latest"
             ),
             handler=_lambda.Handler.FROM_IMAGE,
             runtime=_lambda.Runtime.FROM_IMAGE,
@@ -425,7 +424,6 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "CSRF_SECRET": "production-csrf-secret-change-this-value",  # Change in production
                 "SES_FROM_EMAIL": "noreply@cbba.cloud.org.bo",  # Production verified domain email
                 "FRONTEND_URL": "https://d28z2il3z2vmpc.cloudfront.net",  # Will be updated after CloudFront creation
-                "_X_AMZN_TRACE_ID": ""  # X-Ray environment variable
             },
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -479,7 +477,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 repository=ecr.Repository.from_repository_name(
                     self, "RouterLambdaECRRepo", "registry-router-lambda"
                 ),
-                tag="latest"
+                tag_or_digest="latest"
             ),
             handler=_lambda.Handler.FROM_IMAGE,
             runtime=_lambda.Runtime.FROM_IMAGE,
@@ -489,7 +487,6 @@ class PeopleRegisterInfrastructureStack(Stack):
             environment={
                 "AUTH_FUNCTION_NAME": auth_lambda.function_name,
                 "API_FUNCTION_NAME": api_lambda.function_name,
-                "_X_AMZN_TRACE_ID": ""  # X-Ray environment variable
             }
         )
         
