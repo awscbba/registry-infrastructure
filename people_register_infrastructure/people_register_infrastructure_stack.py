@@ -400,7 +400,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "RATE_LIMIT_TABLE_NAME": rate_limit_table.table_name,
                 "CSRF_TOKEN_TABLE_NAME": csrf_token_table.table_name,
                 "CSRF_SECRET": "production-csrf-secret-change-this-value",  # Change in production
-                "SES_FROM_EMAIL": "srinclan@gmail.com",  # Verified Gmail address
+                "SES_FROM_EMAIL": "courier@cbba.cloud.org.bo",  # Production verified domain email
                 "FRONTEND_URL": "https://d28z2il3z2vmpc.cloudfront.net",  # Will be updated after CloudFront creation
             },
             timeout=Duration.seconds(30),
