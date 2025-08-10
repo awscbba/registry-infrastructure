@@ -184,3 +184,10 @@ pr-validation-test-report.txt
 *.test-report.txt
 *-cache.json
 *-errors.txt
+
+# Production diagnostic files - SECURITY: Never commit production data
+production_diagnosis_*.json
+*_diagnosis_*.json
+diagnostic_*.json
+production_*.json
+*_production_*.json
