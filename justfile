@@ -519,6 +519,12 @@ help:
     @echo "  print-deployment-summary   - Print comprehensive deployment summary"
     @echo "  show-logs                  - Show recent CloudFormation events"
     @echo ""
+    @echo "🔐 RBAC & Security Commands:"
+    @echo "  rbac-full-setup <email>    - Complete RBAC setup with testing"
+    @echo "  auth-full-diagnostics      - Complete authentication diagnostics"
+    @echo "  security-full-audit        - Complete security audit"
+    @echo "  help-scripts               - Show all script tasks (detailed)"
+    @echo ""
     @echo "📖 Usage Examples:"
     @echo "  just deploy-all-comprehensive          # Complete deployment with testing"
     @echo "  just deploy-all-from-repos             # Multi-repository deployment"
@@ -527,6 +533,312 @@ help:
     @echo "  just test-api && just test-frontend    # Test deployments"
     @echo "  just create-test-data                  # Add sample data"
     @echo "  just print-deployment-summary          # Show deployment info"
+    @echo "  just rbac-full-setup admin@example.com # Setup RBAC system"
+    @echo "  just auth-full-diagnostics             # Diagnose auth issues"
     @echo ""
     @echo "🔄 Migration from deploy-all.sh:"
     @echo "  ./deploy-all.sh  →  just deploy-all-comprehensive"
+
+# ============================================================================
+# RBAC (Role-Based Access Control) Management
+# ============================================================================
+
+# Create DynamoDB roles table for RBAC system
+rbac-create-table:
+    @just print-info "Creating DynamoDB roles table for RBAC system..."
+    @python3 scripts/create_roles_table.py
+    @just print-success "RBAC table creation completed"
+
+# Show RBAC implementation summary and migration guide
+rbac-show-summary:
+    @just print-info "Displaying RBAC implementation summary..."
+    @python3 scripts/role_based_access_control_summary.py
+
+# Create admin user in the system
+rbac-create-admin email:
+    @just print-info "Creating admin user: {{email}}"
+    @python3 scripts/create_admin_user.py --email "{{email}}"
+    @just print-success "Admin user created successfully"
+
+# Check admin user status
+rbac-check-admin email:
+    @just print-info "Checking admin user status: {{email}}"
+    @python3 scripts/check_admin_user.py --email "{{email}}"
+
+# Delete admin user
+rbac-delete-admin email:
+    @just print-warning "Deleting admin user: {{email}}"
+    @python3 scripts/delete_admin_user.py --email "{{email}}"
+    @just print-success "Admin user deleted"
+
+# Complete RBAC setup (table + initial admin)
+rbac-setup email:
+    @just print-info "Setting up complete RBAC system..."
+    @just rbac-create-table
+    @just rbac-create-admin "{{email}}"
+    @just print-success "RBAC system setup completed for {{email}}"
+
+# ============================================================================
+# Authentication & Security Diagnostics
+# ============================================================================
+
+# Run comprehensive authentication diagnostics
+auth-diagnose:
+    @just print-info "Running authentication diagnostics..."
+    @python3 scripts/debug_live_auth_issue.py
+    @just print-success "Authentication diagnostics completed"
+
+# Monitor authentication logs in real-time
+auth-monitor-logs:
+    @just print-info "Starting authentication log monitoring..."
+    @python3 scripts/monitor_auth_logs.py
+
+# Monitor X-Ray authentication flow
+auth-monitor-xray:
+    @just print-info "Starting X-Ray authentication flow monitoring..."
+    @python3 scripts/monitor_xray_auth_flow.py
+
+# Test user login flow
+auth-test-login email:
+    @just print-info "Testing login flow for: {{email}}"
+    @python3 scripts/test_user_login_flow.py --email "{{email}}"
+
+# Test session persistence
+auth-test-session:
+    @just print-info "Testing session persistence..."
+    @python3 scripts/test_session_persistence.py
+
+# Diagnose frontend authentication issues
+auth-diagnose-frontend:
+    @just print-info "Diagnosing frontend authentication issues..."
+    @python3 scripts/diagnose_frontend_auth_issue.py
+
+# Create debug bookmarklet for browser debugging
+auth-create-bookmarklet:
+    @just print-info "Creating authentication debug bookmarklet..."
+    @python3 scripts/create_debug_bookmarklet.py
+    @just print-success "Debug bookmarklet created"
+
+# Create log interceptor for debugging
+auth-create-interceptor:
+    @just print-info "Creating authentication log interceptor..."
+    @python3 scripts/create_log_interceptor.py
+    @just print-success "Log interceptor created"
+
+# ============================================================================
+# Production Diagnostics & Monitoring
+# ============================================================================
+
+# Diagnose production 502 errors
+prod-diagnose-502:
+    @just print-info "Diagnosing production 502 errors..."
+    @python3 scripts/diagnose_production_502.py
+
+# Run security vulnerability report
+security-scan:
+    @just print-info "Running security vulnerability scan..."
+    @python3 scripts/security_vulnerability_report.py
+    @just print-success "Security scan completed"
+
+# Debug password hash issues
+debug-password-hash:
+    @just print-info "Debugging password hash issues..."
+    @python3 scripts/debug_password_hash_issue.py
+
+# Investigate authentication issues
+investigate-auth:
+    @just print-info "Investigating authentication issues..."
+    @python3 scripts/investigate_auth_issue.py
+
+# ============================================================================
+# Summary & Documentation Scripts
+# ============================================================================
+
+# Show authentication improvements summary
+show-auth-improvements:
+    @just print-info "Displaying authentication improvements summary..."
+    @python3 scripts/authentication_improvements_summary.py
+
+# Show authentication issue summary
+show-auth-issues:
+    @just print-info "Displaying authentication issue summary..."
+    @python3 scripts/auth_issue_summary.py
+
+# Show login fix summary
+show-login-fixes:
+    @just print-info "Displaying login fix summary..."
+    @python3 scripts/login_fix_summary.py
+
+# Show test fixes summary
+show-test-fixes:
+    @just print-info "Displaying test fixes summary..."
+    @python3 scripts/test_fixes_summary.py
+
+# Show final test resolution summary
+show-final-resolution:
+    @just print-info "Displaying final test resolution summary..."
+    @python3 scripts/final_test_resolution_summary.py
+
+# ============================================================================
+# Bash Script Wrappers
+# ============================================================================
+
+# Deploy frontend using bash script
+deploy-frontend-bash:
+    @just print-info "Deploying frontend using bash script..."
+    @chmod +x scripts/deploy-frontend.sh
+    @./scripts/deploy-frontend.sh
+    @just print-success "Frontend deployment completed"
+
+# Run performance profiler
+run-performance-profiler:
+    @just print-info "Running performance profiler..."
+    @chmod +x scripts/performance-profiler.sh
+    @./scripts/performance-profiler.sh
+
+# Run optimized validation
+run-optimized-validation:
+    @just print-info "Running optimized validation..."
+    @chmod +x scripts/optimized-validation.sh
+    @./scripts/optimized-validation.sh
+
+# Run workflow logger
+run-workflow-logger:
+    @just print-info "Starting workflow logger..."
+    @chmod +x scripts/workflow-logger.sh
+    @./scripts/workflow-logger.sh
+
+# Run execution mode detection
+detect-execution-mode:
+    @just print-info "Detecting execution mode..."
+    @chmod +x scripts/execution-mode-detection.sh
+    @./scripts/execution-mode-detection.sh
+
+# Handle artifacts
+handle-artifacts:
+    @just print-info "Handling artifacts..."
+    @chmod +x scripts/artifact-handler.sh
+    @./scripts/artifact-handler.sh
+
+# Test artifact compatibility
+test-artifact-compatibility:
+    @just print-info "Testing artifact compatibility..."
+    @chmod +x scripts/test-artifact-compatibility.sh
+    @./scripts/test-artifact-compatibility.sh
+
+# ============================================================================
+# Comprehensive Task Groups
+# ============================================================================
+
+# Complete RBAC setup and testing
+rbac-full-setup email:
+    @just print-info "🚀 Starting complete RBAC setup..."
+    @just rbac-setup "{{email}}"
+    @just auth-test-login "{{email}}"
+    @just rbac-show-summary
+    @just print-success "🎉 Complete RBAC setup finished!"
+
+# Full authentication diagnostics suite
+auth-full-diagnostics:
+    @just print-info "🔍 Running full authentication diagnostics..."
+    @just auth-diagnose
+    @just auth-diagnose-frontend
+    @just auth-test-session
+    @just show-auth-issues
+    @just print-success "🎉 Full authentication diagnostics completed!"
+
+# Complete security audit
+security-full-audit:
+    @just print-info "🛡️ Running complete security audit..."
+    @just security-scan
+    @just debug-password-hash
+    @just investigate-auth
+    @just show-auth-improvements
+    @just print-success "🎉 Complete security audit finished!"
+
+# Show all summaries and documentation
+show-all-summaries:
+    @just print-info "📋 Displaying all summaries..."
+    @just rbac-show-summary
+    @just show-auth-improvements
+    @just show-auth-issues
+    @just show-login-fixes
+    @just show-test-fixes
+    @just show-final-resolution
+    @just print-success "📋 All summaries displayed!"
+
+# ============================================================================
+# Help for New Tasks
+# ============================================================================
+
+# Show help for RBAC tasks
+help-rbac:
+    @echo ""
+    @echo "🔐 RBAC (Role-Based Access Control) Tasks:"
+    @echo "  rbac-create-table          - Create DynamoDB roles table"
+    @echo "  rbac-show-summary          - Show RBAC implementation guide"
+    @echo "  rbac-create-admin <email>  - Create admin user"
+    @echo "  rbac-check-admin <email>   - Check admin user status"
+    @echo "  rbac-delete-admin <email>  - Delete admin user"
+    @echo "  rbac-setup <email>         - Complete RBAC setup"
+    @echo "  rbac-full-setup <email>    - RBAC setup + testing"
+    @echo ""
+
+# Show help for authentication tasks
+help-auth:
+    @echo ""
+    @echo "🔑 Authentication & Security Tasks:"
+    @echo "  auth-diagnose              - Run authentication diagnostics"
+    @echo "  auth-monitor-logs          - Monitor auth logs in real-time"
+    @echo "  auth-monitor-xray          - Monitor X-Ray auth flow"
+    @echo "  auth-test-login <email>    - Test user login flow"
+    @echo "  auth-test-session          - Test session persistence"
+    @echo "  auth-diagnose-frontend     - Diagnose frontend auth issues"
+    @echo "  auth-create-bookmarklet    - Create debug bookmarklet"
+    @echo "  auth-create-interceptor    - Create log interceptor"
+    @echo "  auth-full-diagnostics      - Complete auth diagnostics suite"
+    @echo ""
+
+# Show help for production tasks
+help-production:
+    @echo ""
+    @echo "🏭 Production & Security Tasks:"
+    @echo "  prod-diagnose-502          - Diagnose production 502 errors"
+    @echo "  security-scan              - Run security vulnerability scan"
+    @echo "  debug-password-hash        - Debug password hash issues"
+    @echo "  investigate-auth           - Investigate auth issues"
+    @echo "  security-full-audit        - Complete security audit"
+    @echo ""
+
+# Show help for summary tasks
+help-summaries:
+    @echo ""
+    @echo "📋 Summary & Documentation Tasks:"
+    @echo "  show-auth-improvements     - Show auth improvements summary"
+    @echo "  show-auth-issues           - Show auth issue summary"
+    @echo "  show-login-fixes           - Show login fix summary"
+    @echo "  show-test-fixes            - Show test fixes summary"
+    @echo "  show-final-resolution      - Show final resolution summary"
+    @echo "  show-all-summaries         - Show all summaries"
+    @echo ""
+
+# Show comprehensive help for all new tasks
+help-scripts:
+    @just help-rbac
+    @just help-auth
+    @just help-production
+    @just help-summaries
+    @echo "🔧 Bash Script Wrappers:"
+    @echo "  deploy-frontend-bash       - Deploy frontend (bash)"
+    @echo "  run-performance-profiler   - Run performance profiler"
+    @echo "  run-optimized-validation   - Run optimized validation"
+    @echo "  run-workflow-logger        - Start workflow logger"
+    @echo "  detect-execution-mode      - Detect execution mode"
+    @echo "  handle-artifacts           - Handle artifacts"
+    @echo "  test-artifact-compatibility - Test artifact compatibility"
+    @echo ""
+    @echo "💡 Quick Start Examples:"
+    @echo "  just rbac-full-setup admin@example.com    # Complete RBAC setup"
+    @echo "  just auth-full-diagnostics                # Full auth diagnostics"
+    @echo "  just security-full-audit                  # Complete security audit"
+    @echo "  just show-all-summaries                   # View all documentation"
