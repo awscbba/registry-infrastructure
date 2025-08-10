@@ -384,7 +384,7 @@ class PeopleRegisterInfrastructureStack(Stack):
             runtime=_lambda.Runtime.FROM_IMAGE,
             timeout=Duration.seconds(30),
             memory_size=512,
-            tracing=_lambda.Tracing.ACTIVE,  # Enable X-Ray tracing
+            # tracing=_lambda.Tracing.ACTIVE,  # Temporarily disabled due to recursion issue
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
@@ -428,7 +428,7 @@ class PeopleRegisterInfrastructureStack(Stack):
             ),
             handler=_lambda.Handler.FROM_IMAGE,
             runtime=_lambda.Runtime.FROM_IMAGE,
-            tracing=_lambda.Tracing.ACTIVE,  # Enable X-Ray tracing
+            # tracing=_lambda.Tracing.ACTIVE,  # Temporarily disabled due to recursion issue
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "PROJECTS_TABLE_NAME": projects_table.table_name,
@@ -523,7 +523,7 @@ class PeopleRegisterInfrastructureStack(Stack):
             runtime=_lambda.Runtime.FROM_IMAGE,
             timeout=Duration.seconds(30),
             memory_size=256,
-            tracing=_lambda.Tracing.ACTIVE,  # Enable X-Ray tracing
+            # tracing=_lambda.Tracing.ACTIVE,  # Temporarily disabled due to recursion issue
             environment={
                 "AUTH_FUNCTION_NAME": auth_lambda.function_name,
                 "API_FUNCTION_NAME": api_lambda.function_name,
