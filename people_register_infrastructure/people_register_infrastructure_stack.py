@@ -417,17 +417,14 @@ class PeopleRegisterInfrastructureStack(Stack):
             )
         )
 
-        # Lambda function for the API - Uses container deployment from ECR
+        # Lambda function for the API - Temporarily using ZIP deployment to fix recursion issue
         api_lambda = _lambda.Function(
             self, "PeopleApiFunction",
-            code=_lambda.Code.from_ecr_image(
-                repository=ecr.Repository.from_repository_name(
-                    self, "ApiLambdaECRRepo", "registry-api-lambda"
-                ),
-                tag_or_digest="latest"
-            ),
-            handler=_lambda.Handler.FROM_IMAGE,
-            runtime=_lambda.Runtime.FROM_IMAGE,
+            code=_lambda.Code.from_asset("lambda"),
+            handler="main.lambda_handler",
+            runtime=_lambda.Runtime.PYTHON_3_11,
+            timeout=Duration.seconds(30),
+            memory_size=512,
             # tracing=_lambda.Tracing.ACTIVE,  # Temporarily disabled due to recursion issue
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
