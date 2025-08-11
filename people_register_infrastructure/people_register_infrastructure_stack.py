@@ -271,32 +271,10 @@ class PeopleRegisterInfrastructureStack(Stack):
         )
 
         # DynamoDB Table for role-based access control (RBAC)
-        roles_table = dynamodb.Table(
+        # Reference existing table instead of creating new one
+        roles_table = dynamodb.Table.from_table_name(
             self, "RolesTable",
-            table_name="people-registry-roles",
-            partition_key=dynamodb.Attribute(
-                name="user_id",
-                type=dynamodb.AttributeType.STRING
-            ),
-            sort_key=dynamodb.Attribute(
-                name="role_type",
-                type=dynamodb.AttributeType.STRING
-            ),
-            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
-            removal_policy=RemovalPolicy.DESTROY,
-            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
-                point_in_time_recovery_enabled=True
-            ),
-        )
-
-        # Add GSI for querying roles by email
-        roles_table.add_global_secondary_index(
-            index_name="email-index",
-            partition_key=dynamodb.Attribute(
-                name="email",
-                type=dynamodb.AttributeType.STRING
-            ),
-            projection_type=dynamodb.ProjectionType.ALL
+            table_name="people-registry-roles"
         )
 
         # DynamoDB Table for storing audit logs
