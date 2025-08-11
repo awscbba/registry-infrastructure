@@ -270,6 +270,35 @@ class PeopleRegisterInfrastructureStack(Stack):
             projection_type=dynamodb.ProjectionType.ALL
         )
 
+        # DynamoDB Table for role-based access control (RBAC)
+        roles_table = dynamodb.Table(
+            self, "RolesTable",
+            table_name="people-registry-roles",
+            partition_key=dynamodb.Attribute(
+                name="user_id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            sort_key=dynamodb.Attribute(
+                name="role_type",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
+        )
+
+        # Add GSI for querying roles by email
+        roles_table.add_global_secondary_index(
+            index_name="email-index",
+            partition_key=dynamodb.Attribute(
+                name="email",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
         # DynamoDB Table for storing audit logs
         audit_logs_table = dynamodb.Table(
             self, "AuditLogsTable",
@@ -461,6 +490,7 @@ class PeopleRegisterInfrastructureStack(Stack):
         session_tracking_table.grant_read_write_data(api_lambda)
         rate_limit_table.grant_read_write_data(api_lambda)
         csrf_token_table.grant_read_write_data(api_lambda)
+        roles_table.grant_read_write_data(api_lambda)  # RBAC roles table
         
         # Add explicit permissions for GSI operations (EmailIndex)
         api_lambda.add_to_role_policy(
@@ -477,6 +507,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 resources=[
                     people_table.table_arn + "/index/*",
                     password_reset_tokens_table.table_arn + "/index/*",
+                    roles_table.table_arn + "/index/*",  # RBAC roles table GSI
                     f"arn:aws:dynamodb:{self.region}:{self.account}:table/*/index/*"
                 ]
             )
