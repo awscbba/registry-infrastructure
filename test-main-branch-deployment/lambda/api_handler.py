@@ -1080,61 +1080,7 @@ def change_password_profile(people_table, audit_logs_table, event):
     except Exception as e:
         print(f"Error in change_password_profile: {str(e)}")
         return error_response(500, 'Internal server error')
-            Key={'id': user_id},
-            UpdateExpression='SET passwordHash = :hash, passwordSalt = :salt, lastPasswordChange = :timestamp, passwordHistory = :history',
-            ExpressionAttributeValues={
-                ':hash': password_data['hash'],
-                ':salt': password_data['salt'],
-                ':timestamp': datetime.utcnow().isoformat(),
-                ':history': password_history
-            }
-        )
-        
-        # Log successful password change with enhanced security logging
-        log_password_event(
-            audit_logs_table,
-            'PASSWORD_CHANGED',
-            user_id,
-            True,
-            email=person['email'],
-            ip_address=client_ip,
-            user_agent=user_agent,
-            additional_details={
-                'source': 'profile',
-                'password_history_count': len(password_history),
-                'change_method': 'user_initiated',
-                'security_context': 'authenticated_session'
-            }
-        )
-        
-        # Send password changed confirmation email
-        email_result = send_password_changed_email(
-            person['email'],
-            person.get('firstName', 'User'),
-            datetime.utcnow().strftime('%Y-%m-%d %H:%M:%S UTC'),
-            client_ip
-        )
-        
-        if email_result['success']:
-            print(f"Password changed confirmation email sent to: {person['email']}")
-        else:
-            print(f"Failed to send password changed email: {email_result['message']}")
-        
-        print(f"Profile password change completed for user: {user_id}")
-        
-        return {
-            'statusCode': 200,
-            'headers': get_cors_headers(),
-            'body': json.dumps({
-                'success': True,
-                'message': 'Password has been successfully changed.',
-                'passwordChangedAt': datetime.utcnow().isoformat()
-            })
-        }
-        
-    except Exception as e:
-        print(f"Error changing password: {str(e)}")
-        return error_response(500, 'Internal server error')
+
 
 def get_security_dashboard(audit_logs_table, event):
     """Get security dashboard data for admin monitoring"""
