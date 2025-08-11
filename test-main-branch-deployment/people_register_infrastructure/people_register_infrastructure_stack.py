@@ -9,6 +9,7 @@ from aws_cdk import (
     aws_s3_deployment as s3deploy,
     aws_iam as iam,
     aws_ses as ses,
+    aws_ecr as ecr,
     Duration,
     RemovalPolicy,
     CfnOutput,
@@ -318,18 +319,17 @@ class PeopleRegisterInfrastructureStack(Stack):
         # 2. Lambda permissions to send emails
         # 3. Environment variables for configuration
 
-        # Authentication Lambda Function - Dedicated for auth operations
+        # Authentication Lambda Function - Uses container deployment from ECR
         auth_lambda = _lambda.Function(
             self, "AuthFunction",
-            runtime=_lambda.Runtime.PYTHON_3_9,
-            handler="auth_handler.lambda_handler",
-            code=_lambda.Code.from_asset("lambda", bundling=BundlingOptions(
-                image=_lambda.Runtime.PYTHON_3_9.bundling_image,
-                command=[
-                    "bash", "-c",
-                    "pip install -r requirements.txt -t /asset-output && cp -au . /asset-output"
-                ],
-            )),
+            code=_lambda.Code.from_ecr_image(
+                repository=ecr.Repository.from_repository_name(
+                    self, "AuthLambdaECRRepo", "registry-api-lambda"
+                ),
+                tag="latest"
+            ),
+            handler=_lambda.Handler.FROM_IMAGE,
+            runtime=_lambda.Runtime.FROM_IMAGE,
             timeout=Duration.seconds(30),
             memory_size=512,
             environment={
@@ -344,18 +344,17 @@ class PeopleRegisterInfrastructureStack(Stack):
         people_table.grant_read_write_data(auth_lambda)
         audit_logs_table.grant_read_write_data(auth_lambda)
 
-        # Lambda function for the API - Final Enhanced API handler (working version)
+        # Lambda function for the API - Uses container deployment from ECR
         api_lambda = _lambda.Function(
             self, "PeopleApiFunction",
-            runtime=_lambda.Runtime.PYTHON_3_9,
-            handler="enhanced_api_handler.lambda_handler",  # Final working enhanced handler
-            code=_lambda.Code.from_asset("lambda", bundling=BundlingOptions(
-                image=_lambda.Runtime.PYTHON_3_9.bundling_image,
-                command=[
-                    "bash", "-c",
-                    "pip install -r requirements.txt -t /asset-output && cp -au . /asset-output"
-                ]
-            )),
+            code=_lambda.Code.from_ecr_image(
+                repository=ecr.Repository.from_repository_name(
+                    self, "ApiLambdaECRRepo", "registry-api-lambda"
+                ),
+                tag="latest"
+            ),
+            handler=_lambda.Handler.FROM_IMAGE,
+            runtime=_lambda.Runtime.FROM_IMAGE,
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "PROJECTS_TABLE_NAME": projects_table.table_name,
