@@ -369,8 +369,8 @@ def lambda_handler(event, context):
         # Password Management Endpoints - New Implementation
         if path == '/auth/password' and http_method == 'PUT':
             try:
-                # Import password management service
-                from password_management_service import PasswordManagementService, PasswordUpdateRequest
+                # Import unified password management service
+                from enhanced_password_service_v2 import PasswordManagementService, PasswordUpdateRequest
                 
                 # Task 20: Rate limiting for password updates
                 if SECURITY_MODULES_AVAILABLE:
@@ -436,7 +436,7 @@ def lambda_handler(event, context):
         # Password validation endpoint
         if path == '/auth/password/validate' and http_method == 'POST':
             try:
-                from password_management_service import PasswordManagementService
+                from enhanced_password_service_v2 import PasswordManagementService
                 
                 body = json.loads(event.get('body', '{}'))
                 if SECURITY_MODULES_AVAILABLE:
@@ -464,7 +464,7 @@ def lambda_handler(event, context):
         # Password history check endpoint
         if path == '/auth/password/check-history' and http_method == 'POST':
             try:
-                from password_management_service import PasswordManagementService
+                from enhanced_password_service_v2 import PasswordManagementService
                 
                 body = json.loads(event.get('body', '{}'))
                 if SECURITY_MODULES_AVAILABLE:
@@ -492,7 +492,7 @@ def lambda_handler(event, context):
         # Admin force password change endpoint
         if path == '/admin/password/force-change' and http_method == 'POST':
             try:
-                from password_management_service import PasswordManagementService
+                from enhanced_password_service_v2 import PasswordManagementService
                 
                 body = json.loads(event.get('body', '{}'))
                 if SECURITY_MODULES_AVAILABLE:
@@ -531,7 +531,7 @@ def lambda_handler(event, context):
         # Admin generate temporary password endpoint
         if path == '/admin/password/generate-temporary' and http_method == 'POST':
             try:
-                from password_management_service import PasswordManagementService
+                from enhanced_password_service_v2 import PasswordManagementService
                 
                 body = json.loads(event.get('body', '{}'))
                 if SECURITY_MODULES_AVAILABLE:

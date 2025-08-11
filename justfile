@@ -14,8 +14,8 @@ NC := '\033[0m'
 
 # Variables
 STACK_NAME := "PeopleRegisterInfrastructureStack"
-FRONTEND_DIR := "../people-register-frontend"
-API_DIR := "../people-register-api"
+FRONTEND_DIR := "../registry-frontend"
+API_DIR := "../registry-api"
 WORK_DIR := "/tmp/people-register-deployment"
 
 # CodeCatalyst repository URLs (update these with your actual URLs)

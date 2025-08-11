@@ -373,7 +373,131 @@ class EnhancedPasswordServiceV2:
         except Exception as e:
             print(f"Error logging security event: {str(e)}")
     
-    def change_password_with_history_check(self, user_id: str, current_password: str, new_password: str, confirm_password: str, ip_address: str = None, user_agent: str = None) -> Dict[str, Any]:
+    async def update_password(self, person_id: str, password_request, ip_address: str = None, user_agent: str = None) -> Tuple[bool, Dict[str, Any], str]:
+        """
+        Async wrapper for password update to maintain compatibility with old API
+        """
+        try:
+            # Extract data from password_request object
+            current_password = getattr(password_request, 'current_password', '')
+            new_password = getattr(password_request, 'new_password', '')
+            confirm_password = getattr(password_request, 'confirm_password', '')
+            
+            result = self.change_password_with_history_check(
+                user_id=person_id,
+                current_password=current_password,
+                new_password=new_password,
+                confirm_password=confirm_password,
+                ip_address=ip_address,
+                user_agent=user_agent
+            )
+            
+            if result.get('success', False):
+                return True, result, ""
+            else:
+                return False, result, result.get('error', 'Password update failed')
+                
+        except Exception as e:
+            error_msg = f"Password update failed: {str(e)}"
+            return False, {'success': False, 'error': error_msg}, error_msg
+
+    async def validate_password_change_request(self, person_id: str, current_password: str) -> Tuple[bool, str]:
+        """
+        Async wrapper for password validation to maintain compatibility with old API
+        """
+        try:
+            # Get user data from DynamoDB
+            response = self.people_table.get_item(Key={'id': person_id})
+            
+            if 'Item' not in response:
+                return False, "User not found"
+            
+            user_item = response['Item']
+            stored_hash = user_item.get('password_hash', '')
+            
+            if not stored_hash:
+                return False, "No password set for user"
+            
+            # Verify current password
+            is_valid = self.verify_password(current_password, stored_hash)
+            
+            if is_valid:
+                return True, ""
+            else:
+                return False, "Current password is incorrect"
+                
+        except Exception as e:
+            error_msg = f"Password validation failed: {str(e)}"
+            return False, error_msg
+
+    async def validate_password_strength_async(self, password: str) -> Tuple[bool, List[str]]:
+        """
+        Async wrapper for password strength validation
+        """
+        try:
+            errors = self.validate_password_strength(password)
+            if not errors:
+                return True, []
+            else:
+                error_messages = [error.message for error in errors]
+                return False, error_messages
+        except Exception as e:
+            return False, [f"Password validation failed: {str(e)}"]
+
+    async def check_password_history_async(self, person_id: str, new_password: str) -> Tuple[bool, str]:
+        """
+        Async wrapper for password history check
+        """
+        try:
+            can_use = self.check_password_history(person_id, new_password)
+            if can_use:
+                return True, ""
+            else:
+                return False, "Password has been used recently and cannot be reused"
+        except Exception as e:
+            return False, f"Password history check failed: {str(e)}"
+
+    async def generate_temporary_password_async(self, person_id: str, admin_id: str) -> Tuple[bool, str, str]:
+        """
+        Async wrapper for temporary password generation
+        """
+        try:
+            # Generate a secure temporary password
+            import secrets
+            import string
+            
+            # Generate 12-character password with mixed case, numbers, and symbols
+            alphabet = string.ascii_letters + string.digits + "!@#$%^&*"
+            temp_password = ''.join(secrets.choice(alphabet) for _ in range(12))
+            
+            # Hash the temporary password
+            password_data = self.hash_password(temp_password)
+            password_hash = password_data['hash']
+            
+            # Update user's password in database
+            self.people_table.update_item(
+                Key={'id': person_id},
+                UpdateExpression='SET password_hash = :hash, require_password_change = :require_change, updated_at = :updated_at',
+                ExpressionAttributeValues={
+                    ':hash': password_hash,
+                    ':require_change': True,
+                    ':updated_at': datetime.now(timezone.utc).isoformat()
+                }
+            )
+            
+            # Log security event
+            self.log_security_event(
+                user_id=person_id,
+                event_type=SecurityEventType.ADMIN_PASSWORD_RESET,
+                success=True,
+                details={'admin_id': admin_id, 'temporary_password_generated': True}
+            )
+            
+            return True, temp_password, ""
+            
+        except Exception as e:
+            error_msg = f"Temporary password generation failed: {str(e)}"
+            return False, "", error_msg
         """Change password with full validation and history checking"""
         try:
             # Validate new password strength
@@ -803,3 +927,38 @@ def cleanup_expired_sessions_v2() -> int:
     except Exception as e:
         print(f"Error in cleanup_expired_sessions_v2: {str(e)}")
         return 0
+
+# Compatibility classes for old API
+@dataclass
+class PasswordUpdateRequest:
+    """Compatibility class for old password management service API"""
+    current_password: str
+    new_password: str
+    confirm_password: str
+    
+    def __init__(self, current_password: str, new_password: str, confirm_password: str):
+        self.current_password = current_password
+        self.new_password = new_password
+        self.confirm_password = confirm_password
+
+# Compatibility alias for old service
+class PasswordManagementService:
+    """Compatibility wrapper for old password management service API"""
+    
+    def __init__(self):
+        self._service = EnhancedPasswordServiceV2()
+    
+    async def update_password(self, person_id: str, password_request, ip_address: str = None, user_agent: str = None):
+        return await self._service.update_password(person_id, password_request, ip_address, user_agent)
+    
+    async def validate_password_change_request(self, person_id: str, current_password: str):
+        return await self._service.validate_password_change_request(person_id, current_password)
+    
+    async def validate_password_strength(self, password: str):
+        return await self._service.validate_password_strength_async(password)
+    
+    async def check_password_history(self, person_id: str, new_password: str):
+        return await self._service.check_password_history_async(person_id, new_password)
+    
+    async def generate_temporary_password(self, person_id: str, admin_id: str):
+        return await self._service.generate_temporary_password_async(person_id, admin_id)
