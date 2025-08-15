@@ -404,6 +404,12 @@ class PeopleRegisterInfrastructureStack(Stack):
         people_table.grant_read_write_data(auth_lambda)
         audit_logs_table.grant_read_write_data(auth_lambda)
         
+        # CRITICAL FIX: Grant Auth Lambda access to roles table for RBAC functionality
+        roles_table.grant_read_data(auth_lambda)
+        
+        # CRITICAL FIX: Grant Auth Lambda access to account lockout table
+        account_lockout_table.grant_read_write_data(auth_lambda)
+        
         # Add explicit permissions for GSI operations (EmailIndex) for auth lambda
         auth_lambda.add_to_role_policy(
             iam.PolicyStatement(
@@ -419,6 +425,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 resources=[
                     people_table.table_arn + "/index/*",
                     audit_logs_table.table_arn + "/index/*",
+                    roles_table.table_arn + "/index/*",  # CRITICAL FIX: Add roles table GSI access
                     f"arn:aws:dynamodb:{self.region}:{self.account}:table/*/index/*"
                 ]
             )
