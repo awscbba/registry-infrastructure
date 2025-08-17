@@ -395,6 +395,7 @@ class PeopleRegisterInfrastructureStack(Stack):
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
+                "PASSWORD_RESET_TOKENS_TABLE_NAME": password_reset_tokens_table.table_name,
                 "JWT_SECRET": "your-jwt-secret-change-in-production-please",
                 "JWT_EXPIRATION_HOURS": "24",
             }
@@ -403,6 +404,7 @@ class PeopleRegisterInfrastructureStack(Stack):
         # Grant permissions to Auth Lambda
         people_table.grant_read_write_data(auth_lambda)
         audit_logs_table.grant_read_write_data(auth_lambda)
+        password_reset_tokens_table.grant_read_write_data(auth_lambda)
         
         # CRITICAL FIX: Grant Auth Lambda access to roles table for RBAC functionality
         roles_table.grant_read_data(auth_lambda)
