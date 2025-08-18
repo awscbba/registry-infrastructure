@@ -334,15 +334,49 @@ class PeopleRegisterInfrastructureStack(Stack):
             memory_size=512,
             environment={
                 "PEOPLE_TABLE_NAME": people_table.table_name,
+                "PROJECTS_TABLE_NAME": projects_table.table_name,
+                "SUBSCRIPTIONS_TABLE_NAME": subscriptions_table.table_name,
+                "PASSWORD_RESET_TOKENS_TABLE_NAME": password_reset_tokens_table.table_name,
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
+                "EMAIL_TRACKING_TABLE": email_tracking_table.table_name,
+                "PASSWORD_HISTORY_TABLE": password_history_table.table_name,
+                "SESSION_TRACKING_TABLE": session_tracking_table.table_name,
+                "RATE_LIMIT_TABLE_NAME": rate_limit_table.table_name,
+                "CSRF_TOKEN_TABLE_NAME": csrf_token_table.table_name,
                 "JWT_SECRET": "your-jwt-secret-change-in-production-please",
-                "JWT_EXPIRATION_HOURS": "24"
+                "JWT_EXPIRATION_HOURS": "24",
+                "SES_FROM_EMAIL": "noreply@people-register.local",
+                "FRONTEND_URL": "https://d28z2il3z2vmpc.cloudfront.net"
             }
         )
         
         # Grant permissions to Auth Lambda
         people_table.grant_read_write_data(auth_lambda)
+        projects_table.grant_read_write_data(auth_lambda)
+        subscriptions_table.grant_read_write_data(auth_lambda)
+        password_reset_tokens_table.grant_read_write_data(auth_lambda)
         audit_logs_table.grant_read_write_data(auth_lambda)
+        email_tracking_table.grant_read_write_data(auth_lambda)
+        password_history_table.grant_read_write_data(auth_lambda)
+        session_tracking_table.grant_read_write_data(auth_lambda)
+        rate_limit_table.grant_read_write_data(auth_lambda)
+        csrf_token_table.grant_read_write_data(auth_lambda)
+        
+        # Grant Auth Lambda permissions to send emails via SES
+        auth_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ses:SendEmail",
+                    "ses:SendRawEmail",
+                    "ses:SendTemplatedEmail",
+                    "ses:GetSendQuota",
+                    "ses:GetSendStatistics",
+                    "ses:GetAccountSendingEnabled"
+                ],
+                resources=["*"]  # In production, restrict to specific SES resources
+            )
+        )
 
         # Lambda function for the API - Uses container deployment from ECR
         api_lambda = _lambda.Function(
