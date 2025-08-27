@@ -1,0 +1,157 @@
+{
+  "dynamodb_tables": {
+    "v2_tables": {
+      "PeopleTableV2": {
+        "description": "Standardized people table",
+        "exists": false,
+        "error": "Table not found"
+      },
+      "ProjectsTableV2": {
+        "description": "Standardized projects table",
+        "exists": false,
+        "error": "Table not found"
+      },
+      "SubscriptionsTableV2": {
+        "description": "Standardized subscriptions table",
+        "exists": false,
+        "error": "Table not found"
+      }
+    },
+    "legacy_tables": {
+      "PeopleTable": {
+        "description": "Legacy people table",
+        "exists": true,
+        "status": "ACTIVE",
+        "item_count": 9,
+        "table_size_bytes": 4431,
+        "creation_date": "2025-06-09T19:12:52.274000-04:00",
+        "billing_mode": "PAY_PER_REQUEST",
+        "global_secondary_indexes": [
+          {
+            "name": "EmailIndex",
+            "status": "ACTIVE",
+            "item_count": 9
+          }
+        ]
+      },
+      "ProjectsTable": {
+        "description": "Legacy projects table",
+        "exists": true,
+        "status": "ACTIVE",
+        "item_count": 138,
+        "table_size_bytes": 46218,
+        "creation_date": "2025-06-23T00:05:05.500000-04:00",
+        "billing_mode": "PAY_PER_REQUEST",
+        "global_secondary_indexes": []
+      },
+      "SubscriptionsTable": {
+        "description": "Legacy subscriptions table",
+        "exists": true,
+        "status": "ACTIVE",
+        "item_count": 12,
+        "table_size_bytes": 3781,
+        "creation_date": "2025-06-23T00:05:05.494000-04:00",
+        "billing_mode": "PAY_PER_REQUEST",
+        "global_secondary_indexes": [
+          {
+            "name": "ProjectIndex",
+            "status": "ACTIVE",
+            "item_count": 4
+          },
+          {
+            "name": "PersonIndex",
+            "status": "ACTIVE",
+            "item_count": 4
+          }
+        ]
+      }
+    }
+  },
+  "lambda_functions": {
+    "PeopleRegisterInfrastruct-PeopleApiFunction67A8223-xlC79QhrsKBe": {
+      "name": "PeopleRegisterInfrastruct-PeopleApiFunction67A8223-xlC79QhrsKBe",
+      "runtime": "Unknown",
+      "handler": "Unknown",
+      "last_modified": "2025-08-26T20:57:02.000+0000",
+      "memory_size": 512,
+      "timeout": 30,
+      "environment_assessment": {
+        "total_env_vars": 10,
+        "v2_table_vars": {},
+        "legacy_table_vars": {
+          "LOCKOUT_TABLE_NAME": "AccountLockoutTable",
+          "PEOPLE_TABLE_NAME": "PeopleTable",
+          "AUDIT_LOGS_TABLE_NAME": "AuditLogsTable",
+          "CSRF_TOKEN_TABLE_NAME": "CSRFTokenTable"
+        },
+        "has_v2_config": false,
+        "has_legacy_config": true
+      }
+    },
+    "PeopleRegisterInfrastructureS-AuthFunctionA1CD5E0F-lujBJmLNxohb": {
+      "name": "PeopleRegisterInfrastructureS-AuthFunctionA1CD5E0F-lujBJmLNxohb",
+      "runtime": "Unknown",
+      "handler": "Unknown",
+      "last_modified": "2025-08-26T20:57:04.000+0000",
+      "memory_size": 512,
+      "timeout": 30,
+      "environment_assessment": {
+        "total_env_vars": 5,
+        "v2_table_vars": {},
+        "legacy_table_vars": {
+          "PEOPLE_TABLE_NAME": "PeopleTable",
+          "AUDIT_LOGS_TABLE_NAME": "AuditLogsTable",
+          "PASSWORD_RESET_TOKENS_TABLE_NAME": "PasswordResetTokensTable"
+        },
+        "has_v2_config": false,
+        "has_legacy_config": true
+      }
+    },
+    "PeopleRegisterInfrastructur-RouterFunction6AC6EF3B-cFuTZOTV5Cjd": {
+      "name": "PeopleRegisterInfrastructur-RouterFunction6AC6EF3B-cFuTZOTV5Cjd",
+      "runtime": "Unknown",
+      "handler": "Unknown",
+      "last_modified": "2025-08-26T20:57:31.000+0000",
+      "memory_size": 256,
+      "timeout": 30,
+      "environment_assessment": {
+        "total_env_vars": 4,
+        "v2_table_vars": {},
+        "legacy_table_vars": {
+          "PEOPLE_TABLE_NAME": "PeopleTable",
+          "AUDIT_LOGS_TABLE_NAME": "AuditLogsTable"
+        },
+        "has_v2_config": false,
+        "has_legacy_config": true
+      }
+    }
+  },
+  "api_endpoints": {
+    "endpoints_to_verify": [
+      "/v2/people",
+      "/v2/projects",
+      "/v2/subscriptions",
+      "/v2/admin/dashboard",
+      "/health"
+    ],
+    "note": "Manual verification required - check API Gateway and test endpoints",
+    "expected_behavior": "All endpoints should return camelCase fields consistently"
+  },
+  "recommendation": {
+    "status": "NOT_DEPLOYED",
+    "action": "DEPLOY_V2_TABLES",
+    "description": "V2 tables do not exist. Need to deploy through CDK pipeline.",
+    "next_steps": [
+      "Create feature branch for V2 table deployment",
+      "Deploy CDK stack to create V2 tables",
+      "Update Lambda environment variables",
+      "Migrate data from legacy to V2 tables",
+      "Test and verify API functionality"
+    ]
+  },
+  "assessment_metadata": {
+    "timestamp": "2025-08-27T13:22:30.816185",
+    "region": "us-east-1",
+    "assessor": "V2DeploymentAssessment"
+  }
+}

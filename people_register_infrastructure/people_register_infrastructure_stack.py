@@ -360,6 +360,115 @@ class PeopleRegisterInfrastructureStack(Stack):
             projection_type=dynamodb.ProjectionType.ALL
         )
 
+        # ========================================
+        # STANDARDIZED TABLES (V2) - Clean Architecture
+        # ========================================
+        
+        # Standardized People Table with consistent camelCase schema
+        people_table_v2 = dynamodb.Table(
+            self, "PeopleTableV2",
+            table_name="PeopleTableV2",
+            partition_key=dynamodb.Attribute(
+                name="id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,  # Use RETAIN for production
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
+        )
+
+        # Add GSI for querying people by email (required for uniqueness checks)
+        people_table_v2.add_global_secondary_index(
+            index_name="EmailIndex",
+            partition_key=dynamodb.Attribute(
+                name="email",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # Standardized Projects Table with consistent camelCase schema
+        projects_table_v2 = dynamodb.Table(
+            self, "ProjectsTableV2",
+            table_name="ProjectsTableV2",
+            partition_key=dynamodb.Attribute(
+                name="id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
+        )
+
+        # Add GSI for querying projects by status
+        projects_table_v2.add_global_secondary_index(
+            index_name="StatusIndex",
+            partition_key=dynamodb.Attribute(
+                name="status",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # Add GSI for querying projects by category
+        projects_table_v2.add_global_secondary_index(
+            index_name="CategoryIndex",
+            partition_key=dynamodb.Attribute(
+                name="category",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # Standardized Subscriptions Table with consistent camelCase schema
+        subscriptions_table_v2 = dynamodb.Table(
+            self, "SubscriptionsTableV2",
+            table_name="SubscriptionsTableV2",
+            partition_key=dynamodb.Attribute(
+                name="id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
+        )
+
+        # Add GSI for querying subscriptions by project
+        subscriptions_table_v2.add_global_secondary_index(
+            index_name="ProjectIndex",
+            partition_key=dynamodb.Attribute(
+                name="projectId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # Add GSI for querying subscriptions by person
+        subscriptions_table_v2.add_global_secondary_index(
+            index_name="PersonIndex",
+            partition_key=dynamodb.Attribute(
+                name="personId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # Add GSI for querying subscriptions by status
+        subscriptions_table_v2.add_global_secondary_index(
+            index_name="StatusIndex",
+            partition_key=dynamodb.Attribute(
+                name="status",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
         # AWS SES Configuration for Email Services
         # Note: For development, we'll rely on manual SES setup
         # In production, you would verify your domain and email addresses through the AWS Console
@@ -446,9 +555,17 @@ class PeopleRegisterInfrastructureStack(Stack):
             runtime=_lambda.Runtime.FROM_IMAGE,
             # tracing=_lambda.Tracing.ACTIVE,  # Temporarily disabled due to recursion issue
             environment={
+                # Legacy tables (for backward compatibility during migration)
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "PROJECTS_TABLE_NAME": projects_table.table_name,
                 "SUBSCRIPTIONS_TABLE_NAME": subscriptions_table.table_name,
+                
+                # Standardized tables (V2) - Clean Architecture
+                "PEOPLE_TABLE_V2_NAME": people_table_v2.table_name,
+                "PROJECTS_TABLE_V2_NAME": projects_table_v2.table_name,
+                "SUBSCRIPTIONS_TABLE_V2_NAME": subscriptions_table_v2.table_name,
+                
+                # Other tables
                 "PASSWORD_RESET_TOKENS_TABLE_NAME": password_reset_tokens_table.table_name,
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
                 "LOCKOUT_TABLE_NAME": account_lockout_table.table_name,
@@ -466,9 +583,17 @@ class PeopleRegisterInfrastructureStack(Stack):
         )
 
         # Grant Lambda permissions to access DynamoDB tables
+        # Legacy tables (for backward compatibility during migration)
         people_table.grant_read_write_data(api_lambda)
         projects_table.grant_read_write_data(api_lambda)
         subscriptions_table.grant_read_write_data(api_lambda)
+        
+        # Standardized tables (V2) - Clean Architecture
+        people_table_v2.grant_read_write_data(api_lambda)
+        projects_table_v2.grant_read_write_data(api_lambda)
+        subscriptions_table_v2.grant_read_write_data(api_lambda)
+        
+        # Other tables
         password_reset_tokens_table.grant_read_write_data(api_lambda)
         audit_logs_table.grant_read_write_data(api_lambda)
         account_lockout_table.grant_read_write_data(api_lambda)
@@ -492,9 +617,17 @@ class PeopleRegisterInfrastructureStack(Stack):
                     "dynamodb:Scan"
                 ],
                 resources=[
+                    # Legacy tables GSI
                     people_table.table_arn + "/index/*",
                     password_reset_tokens_table.table_arn + "/index/*",
                     roles_table.table_arn + "/index/*",  # RBAC roles table GSI
+                    
+                    # Standardized tables (V2) GSI
+                    people_table_v2.table_arn + "/index/*",
+                    projects_table_v2.table_arn + "/index/*",
+                    subscriptions_table_v2.table_arn + "/index/*",
+                    
+                    # Wildcard for any other indexes
                     f"arn:aws:dynamodb:{self.region}:{self.account}:table/*/index/*"
                 ]
             )
@@ -683,4 +816,26 @@ function handler(event) {
             value=audit_logs_table.table_name,
             description="Audit Logs DynamoDB table name",
             export_name="AuditLogsTableName"
+        )
+
+        # Standardized Tables (V2) Outputs
+        CfnOutput(
+            self, "PeopleTableV2Name",
+            value=people_table_v2.table_name,
+            description="Standardized People DynamoDB table name (V2)",
+            export_name="PeopleTableV2Name"
+        )
+
+        CfnOutput(
+            self, "ProjectsTableV2Name",
+            value=projects_table_v2.table_name,
+            description="Standardized Projects DynamoDB table name (V2)",
+            export_name="ProjectsTableV2Name"
+        )
+
+        CfnOutput(
+            self, "SubscriptionsTableV2Name",
+            value=subscriptions_table_v2.table_name,
+            description="Standardized Subscriptions DynamoDB table name (V2)",
+            export_name="SubscriptionsTableV2Name"
         )
