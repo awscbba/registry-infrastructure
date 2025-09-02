@@ -502,9 +502,15 @@ class PeopleRegisterInfrastructureStack(Stack):
             memory_size=512,
             # tracing=_lambda.Tracing.ACTIVE,  # Temporarily disabled due to recursion issue
             environment={
+                # Legacy tables (for backward compatibility)
                 "PEOPLE_TABLE_NAME": people_table.table_name,
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
                 "PASSWORD_RESET_TOKENS_TABLE_NAME": password_reset_tokens_table.table_name,
+                
+                # Standardized V2 tables (required for authentication)
+                "PEOPLE_TABLE_V2_NAME": people_table_v2.table_name,
+                
+                # Auth configuration
                 "JWT_SECRET": "your-jwt-secret-change-in-production-please",
                 "JWT_EXPIRATION_HOURS": "24",
             }
@@ -512,6 +518,7 @@ class PeopleRegisterInfrastructureStack(Stack):
         
         # Grant permissions to Auth Lambda
         people_table.grant_read_write_data(auth_lambda)
+        people_table_v2.grant_read_write_data(auth_lambda)  # CRITICAL FIX: Grant access to V2 table
         audit_logs_table.grant_read_write_data(auth_lambda)
         password_reset_tokens_table.grant_read_write_data(auth_lambda)
         
@@ -535,6 +542,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 ],
                 resources=[
                     people_table.table_arn + "/index/*",
+                    people_table_v2.table_arn + "/index/*",  # CRITICAL FIX: Add V2 table GSI access
                     audit_logs_table.table_arn + "/index/*",
                     roles_table.table_arn + "/index/*",  # CRITICAL FIX: Add roles table GSI access
                     f"arn:aws:dynamodb:{self.region}:{self.account}:table/*/index/*"
