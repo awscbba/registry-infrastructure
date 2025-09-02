@@ -510,9 +510,22 @@ class PeopleRegisterInfrastructureStack(Stack):
                 # Standardized V2 tables (required for authentication)
                 "PEOPLE_TABLE_V2_NAME": people_table_v2.table_name,
                 
+                # Additional tables needed for auth functionality
+                "LOCKOUT_TABLE_NAME": account_lockout_table.table_name,
+                "EMAIL_TRACKING_TABLE": email_tracking_table.table_name,
+                "PASSWORD_HISTORY_TABLE": password_history_table.table_name,
+                "SESSION_TRACKING_TABLE": session_tracking_table.table_name,
+                "RATE_LIMIT_TABLE_NAME": rate_limit_table.table_name,
+                "CSRF_TOKEN_TABLE_NAME": csrf_token_table.table_name,
+                
                 # Auth configuration
                 "JWT_SECRET": "your-jwt-secret-change-in-production-please",
                 "JWT_EXPIRATION_HOURS": "24",
+                
+                # Email and frontend configuration
+                "CSRF_SECRET": "production-csrf-secret-change-this-value",
+                "SES_FROM_EMAIL": "noreply@cbba.cloud.org.bo",
+                "FRONTEND_URL": "https://d28z2il3z2vmpc.cloudfront.net",
             }
         )
         
@@ -522,11 +535,35 @@ class PeopleRegisterInfrastructureStack(Stack):
         audit_logs_table.grant_read_write_data(auth_lambda)
         password_reset_tokens_table.grant_read_write_data(auth_lambda)
         
+        # Grant access to additional tables needed for auth functionality
+        account_lockout_table.grant_read_write_data(auth_lambda)
+        email_tracking_table.grant_read_write_data(auth_lambda)
+        password_history_table.grant_read_write_data(auth_lambda)
+        session_tracking_table.grant_read_write_data(auth_lambda)
+        rate_limit_table.grant_read_write_data(auth_lambda)
+        csrf_token_table.grant_read_write_data(auth_lambda)
+        
         # CRITICAL FIX: Grant Auth Lambda access to roles table for RBAC functionality
         roles_table.grant_read_data(auth_lambda)
         
         # CRITICAL FIX: Grant Auth Lambda access to account lockout table
         account_lockout_table.grant_read_write_data(auth_lambda)
+        
+        # Grant Auth Lambda permissions to send emails via SES (for password reset emails)
+        auth_lambda.add_to_role_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                actions=[
+                    "ses:SendEmail",
+                    "ses:SendRawEmail",
+                    "ses:SendTemplatedEmail",
+                    "ses:GetSendQuota",
+                    "ses:GetSendStatistics",
+                    "ses:GetAccountSendingEnabled"
+                ],
+                resources=["*"]  # In production, restrict to specific SES resources
+            )
+        )
         
         # Add explicit permissions for GSI operations (EmailIndex) for auth lambda
         auth_lambda.add_to_role_policy(
