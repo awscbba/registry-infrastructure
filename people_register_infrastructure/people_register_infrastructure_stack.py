@@ -764,7 +764,7 @@ class PeopleRegisterInfrastructureStack(Stack):
         # Grant CloudFront access to S3 bucket
         frontend_bucket.grant_read(origin_access_identity)
 
-        # CloudFront Function for URL rewriting to support React Router
+        # CloudFront Function for URL rewriting to support clean URLs
         url_rewrite_function = cloudfront.Function(
             self, "UrlRewriteFunction",
             code=cloudfront.FunctionCode.from_inline("""
@@ -772,18 +772,27 @@ function handler(event) {
     var request = event.request;
     var uri = request.uri;
     
-    // If URI has an extension (like .js, .css, .png, etc.), serve it as-is
-    if (uri.includes('.')) {
+    // Handle root path
+    if (uri === '/') {
         return request;
     }
     
-    // For all other paths (React Router routes), serve index.html
-    request.uri = '/index.html';
+    // If URI doesn't have an extension and doesn't end with /
+    if (!uri.includes('.') && !uri.endsWith('/')) {
+        // Check if it's a known directory path
+        if (uri === '/admin' || uri === '/login' || uri === '/dashboard' || uri.startsWith('/subscribe/')) {
+            request.uri = uri + '/index.html';
+        }
+    }
+    // If URI ends with / but isn't root
+    else if (uri.endsWith('/') && uri !== '/') {
+        request.uri = uri + 'index.html';
+    }
     
     return request;
 }
             """),
-            comment="Rewrites URLs to serve index.html for React Router routing"
+            comment="Rewrites URLs to serve index.html files for static site routing"
         )
 
         # CloudFront Distribution
