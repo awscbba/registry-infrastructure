@@ -777,17 +777,14 @@ function handler(event) {
         return request;
     }
     
-    // If URI doesn't have an extension and doesn't end with /
-    if (!uri.includes('.') && !uri.endsWith('/')) {
-        // Check if it's a known directory path
-        if (uri === '/admin' || uri === '/login' || uri === '/dashboard' || uri.startsWith('/subscribe/')) {
-            request.uri = uri + '/index.html';
-        }
+    // If URI has a file extension, serve it as-is (assets like .js, .css, .png, etc.)
+    if (uri.includes('.')) {
+        return request;
     }
-    // If URI ends with / but isn't root
-    else if (uri.endsWith('/') && uri !== '/') {
-        request.uri = uri + 'index.html';
-    }
+    
+    // For all other paths (React Router routes), serve index.html
+    // This includes paths like /subscribe/voluntarios/, /admin, /login, etc.
+    request.uri = '/index.html';
     
     return request;
 }
