@@ -112,7 +112,7 @@ class AmplifyFrontendStack(Stack):
         )
 
         CfnOutput(
-            self, "AmplifyServiceRole",
+            self, "AmplifyServiceRoleOutput",
             value=amplify_role.role_arn,
             description="IAM role for Amplify S3 access",
             export_name="AmplifyServiceRoleArn"
