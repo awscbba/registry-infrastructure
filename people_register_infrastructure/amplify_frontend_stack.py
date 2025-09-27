@@ -23,7 +23,9 @@ class AmplifyFrontendStack(Stack):
             self, "AmplifyDeploymentBucket",
             bucket_name=f"amplify-deployments-d2df6u91uqaaay",
             removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True
+            auto_delete_objects=True,
+            public_read_access=False,
+            block_public_access=s3.BlockPublicAccess.BLOCK_ALL
         )
 
         # Create Amplify App for SSR frontend hosting
@@ -42,7 +44,11 @@ class AmplifyFrontendStack(Stack):
                     statements=[
                         iam.PolicyStatement(
                             effect=iam.Effect.ALLOW,
-                            actions=["s3:GetObject", "s3:ListBucket"],
+                            actions=[
+                                "s3:GetObject",
+                                "s3:GetObjectVersion", 
+                                "s3:ListBucket"
+                            ],
                             resources=[
                                 deployment_bucket.bucket_arn,
                                 f"{deployment_bucket.bucket_arn}/*"
@@ -51,6 +57,36 @@ class AmplifyFrontendStack(Stack):
                     ]
                 )
             }
+        )
+
+        # Add bucket policy to allow Amplify service access
+        deployment_bucket.add_to_resource_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                principals=[iam.ServicePrincipal("amplify.amazonaws.com")],
+                actions=[
+                    "s3:GetObject",
+                    "s3:GetObjectVersion",
+                    "s3:ListBucket"
+                ],
+                resources=[
+                    deployment_bucket.bucket_arn,
+                    f"{deployment_bucket.bucket_arn}/*"
+                ]
+            )
+        )
+
+        # Also allow the account to manage the bucket
+        deployment_bucket.add_to_resource_policy(
+            iam.PolicyStatement(
+                effect=iam.Effect.ALLOW,
+                principals=[iam.AccountRootPrincipal()],
+                actions=["s3:*"],
+                resources=[
+                    deployment_bucket.bucket_arn,
+                    f"{deployment_bucket.bucket_arn}/*"
+                ]
+            )
         )
 
         # Outputs
@@ -76,8 +112,8 @@ class AmplifyFrontendStack(Stack):
         )
 
         CfnOutput(
-            self, "DeploymentInstructions",
-            value=f"Use: just deploy-amplify {amplify_app.app_id}",
-            description="Command to deploy to Amplify via S3",
-            export_name="AmplifyDeploymentCommand"
+            self, "AmplifyServiceRole",
+            value=amplify_role.role_arn,
+            description="IAM role for Amplify S3 access",
+            export_name="AmplifyServiceRoleArn"
         )
