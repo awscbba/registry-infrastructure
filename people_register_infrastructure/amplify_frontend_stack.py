@@ -12,7 +12,19 @@ from constructs import Construct
 class AmplifyFrontendStack(Stack):
     """
     AWS Amplify stack for hosting the Astro SSR frontend.
-    Uses S3 as source since CodeCatalyst is not directly supported.
+    
+    PRODUCTION STATUS (Working Setup):
+    - App ID: d2df6u91uqaaay  
+    - URL: https://main.d2df6u91uqaaay.amplifyapp.com
+    - Platform: WEB_COMPUTE (SSR enabled)
+    - Source: GitHub mirror (awscbba/registry-frontend) auto-synced from CodeCatalyst
+    - Framework: Astro with astro-aws-amplify adapter
+    - Build: Custom build spec for SSR support
+    - Role: arn:aws:iam::142728997126:role/AmplifySSRComputeRole
+    
+    Note: The actual Amplify app is configured manually in the console
+    to avoid breaking the current working setup. This CDK stack provides
+    supporting infrastructure only.
     """
 
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
