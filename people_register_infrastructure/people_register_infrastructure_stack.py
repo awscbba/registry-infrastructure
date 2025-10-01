@@ -578,10 +578,24 @@ class PeopleRegisterInfrastructureStack(Stack):
                     "dynamodb:Scan"
                 ],
                 resources=[
+                    # Base tables (required for Scan operations)
+                    people_table.table_arn,
+                    people_table_v2.table_arn,
+                    audit_logs_table.table_arn,
+                    password_reset_tokens_table.table_arn,
+                    roles_table.table_arn,
+                    account_lockout_table.table_arn,
+                    email_tracking_table.table_arn,
+                    password_history_table.table_arn,
+                    session_tracking_table.table_arn,
+                    rate_limit_table.table_arn,
+                    csrf_token_table.table_arn,
+                    
+                    # Table indexes (GSI)
                     people_table.table_arn + "/index/*",
-                    people_table_v2.table_arn + "/index/*",  # CRITICAL FIX: Add V2 table GSI access
+                    people_table_v2.table_arn + "/index/*",
                     audit_logs_table.table_arn + "/index/*",
-                    roles_table.table_arn + "/index/*",  # CRITICAL FIX: Add roles table GSI access
+                    roles_table.table_arn + "/index/*",
                     f"arn:aws:dynamodb:{self.region}:{self.account}:table/*/index/*"
                 ]
             )
@@ -662,17 +676,32 @@ class PeopleRegisterInfrastructureStack(Stack):
                     "dynamodb:Scan"
                 ],
                 resources=[
-                    # Legacy tables GSI
+                    # Base tables (required for Scan operations)
+                    people_table.table_arn,
+                    projects_table.table_arn,
+                    subscriptions_table.table_arn,
+                    people_table_v2.table_arn,
+                    projects_table_v2.table_arn,
+                    subscriptions_table_v2.table_arn,
+                    audit_logs_table.table_arn,
+                    password_reset_tokens_table.table_arn,
+                    roles_table.table_arn,
+                    account_lockout_table.table_arn,
+                    email_tracking_table.table_arn,
+                    password_history_table.table_arn,
+                    session_tracking_table.table_arn,
+                    rate_limit_table.table_arn,
+                    csrf_token_table.table_arn,
+                    
+                    # Table indexes (GSI)
                     people_table.table_arn + "/index/*",
                     password_reset_tokens_table.table_arn + "/index/*",
-                    roles_table.table_arn + "/index/*",  # RBAC roles table GSI
-                    
-                    # Standardized tables (V2) GSI
+                    roles_table.table_arn + "/index/*",
                     people_table_v2.table_arn + "/index/*",
                     projects_table_v2.table_arn + "/index/*",
                     subscriptions_table_v2.table_arn + "/index/*",
                     
-                    # Wildcard for any other indexes
+                    # Wildcard for any other tables/indexes
                     f"arn:aws:dynamodb:{self.region}:{self.account}:table/*/index/*"
                 ]
             )
