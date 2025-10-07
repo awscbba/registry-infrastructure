@@ -5,7 +5,7 @@ from aws_cdk import (
     aws_dynamodb as dynamodb,
     aws_s3 as s3,
     aws_cloudfront as cloudfront,
-    aws_cloudfront_origins as origins,
+    aws_cloudfront_origins as cloudfront_origins,
     aws_s3_deployment as s3deploy,
     aws_iam as iam,
     aws_ses as ses,
@@ -469,6 +469,74 @@ class PeopleRegisterInfrastructureStack(Stack):
             projection_type=dynamodb.ProjectionType.ALL
         )
 
+        # DynamoDB Table for storing project form submissions (Dynamic Form Builder)
+        project_submissions_table = dynamodb.Table(
+            self, "ProjectSubmissionsTable",
+            table_name="ProjectSubmissions",
+            partition_key=dynamodb.Attribute(
+                name="id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
+        )
+
+        # Add GSI for querying submissions by project
+        project_submissions_table.add_global_secondary_index(
+            index_name="ProjectIndex",
+            partition_key=dynamodb.Attribute(
+                name="projectId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # Add GSI for querying submissions by person
+        project_submissions_table.add_global_secondary_index(
+            index_name="PersonIndex",
+            partition_key=dynamodb.Attribute(
+                name="personId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # S3 Bucket for project images (Dynamic Form Builder)
+        project_images_bucket = s3.Bucket(
+            self, "ProjectImagesBucket",
+            bucket_name=f"people-registry-project-images-{self.account}-{self.region}",
+            removal_policy=RemovalPolicy.DESTROY,
+            auto_delete_objects=True,
+            cors=[s3.CorsRule(
+                allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.PUT, s3.HttpMethods.POST],
+                allowed_origins=["*"],  # Configure for your domain in production
+                allowed_headers=["*"],
+                max_age=3000
+            )],
+            lifecycle_rules=[
+                s3.LifecycleRule(
+                    id="DeleteIncompleteMultipartUploads",
+                    abort_incomplete_multipart_upload_after=Duration.days(1)
+                )
+            ]
+        )
+
+        # CloudFront Distribution for project images
+        project_images_distribution = cloudfront.Distribution(
+            self, "ProjectImagesDistribution",
+            default_behavior=cloudfront.BehaviorOptions(
+                origin=cloudfront_origins.S3Origin(project_images_bucket),
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                allowed_methods=cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+            ),
+            price_class=cloudfront.PriceClass.PRICE_CLASS_100,  # Use only North America and Europe
+            comment="CloudFront distribution for project images"
+        )
+
         # AWS SES Configuration for Email Services
         # Note: For development, we'll rely on manual SES setup
         # In production, you would verify your domain and email addresses through the AWS Console
@@ -624,6 +692,13 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "PROJECTS_TABLE_V2_NAME": projects_table_v2.table_name,
                 "SUBSCRIPTIONS_TABLE_V2_NAME": subscriptions_table_v2.table_name,
                 
+                # Dynamic Form Builder tables
+                "PROJECT_SUBMISSIONS_TABLE_NAME": project_submissions_table.table_name,
+                
+                # S3 and CloudFront for project images
+                "PROJECT_IMAGES_BUCKET_NAME": project_images_bucket.bucket_name,
+                "PROJECT_IMAGES_CLOUDFRONT_DOMAIN": project_images_distribution.distribution_domain_name,
+                
                 # Other tables
                 "PASSWORD_RESET_TOKENS_TABLE_NAME": password_reset_tokens_table.table_name,
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
@@ -651,6 +726,12 @@ class PeopleRegisterInfrastructureStack(Stack):
         people_table_v2.grant_read_write_data(api_lambda)
         projects_table_v2.grant_read_write_data(api_lambda)
         subscriptions_table_v2.grant_read_write_data(api_lambda)
+        
+        # Dynamic Form Builder tables
+        project_submissions_table.grant_read_write_data(api_lambda)
+        
+        # Grant S3 permissions for project images
+        project_images_bucket.grant_read_write(api_lambda)
         
         # Other tables
         password_reset_tokens_table.grant_read_write_data(api_lambda)
@@ -825,7 +906,7 @@ function handler(event) {
         distribution = cloudfront.Distribution(
             self, "FrontendDistribution",
             default_behavior=cloudfront.BehaviorOptions(
-                origin=origins.S3Origin(
+                origin=cloudfront_origins.S3Origin(
                     frontend_bucket,
                     origin_access_identity=origin_access_identity
                 ),
@@ -909,4 +990,26 @@ function handler(event) {
             value=subscriptions_table_v2.table_name,
             description="Standardized Subscriptions DynamoDB table name (V2)",
             export_name="SubscriptionsTableV2Name"
+        )
+
+        # Dynamic Form Builder Outputs
+        CfnOutput(
+            self, "ProjectSubmissionsTableName",
+            value=project_submissions_table.table_name,
+            description="Project Submissions DynamoDB table name",
+            export_name="ProjectSubmissionsTableName"
+        )
+
+        CfnOutput(
+            self, "ProjectImagesBucketName",
+            value=project_images_bucket.bucket_name,
+            description="S3 bucket for project images",
+            export_name="ProjectImagesBucketName"
+        )
+
+        CfnOutput(
+            self, "ProjectImagesCloudFrontDomain",
+            value=project_images_distribution.distribution_domain_name,
+            description="CloudFront domain for project images",
+            export_name="ProjectImagesCloudFrontDomain"
         )
