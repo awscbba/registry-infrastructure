@@ -4,7 +4,7 @@ import os
 import aws_cdk as cdk
 
 from people_register_infrastructure.people_register_infrastructure_stack import PeopleRegisterInfrastructureStack
-# from people_register_infrastructure.amplify_frontend_stack import AmplifyFrontendStack
+from people_register_infrastructure.amplify_frontend_stack import AmplifyFrontendStack
 
 
 app = cdk.App()
@@ -18,12 +18,12 @@ backend_stack = PeopleRegisterInfrastructureStack(app, "PeopleRegisterInfrastruc
     )
 )
 
-# Frontend Amplify stack (temporarily disabled due to import issue)
-# frontend_stack = AmplifyFrontendStack(app, "PeopleRegisterAmplifyStack",
-#     env=cdk.Environment(
-#         account='142728997126',  # AWS Account ID
-#         region='us-east-1'       # AWS Region
-#     )
-# )
+# Frontend Amplify stack
+frontend_stack = AmplifyFrontendStack(app, "PeopleRegisterAmplifyStack",
+    env=cdk.Environment(
+        account='142728997126',  # AWS Account ID
+        region='us-east-1'       # AWS Region
+    )
+)
 
 app.synth()
