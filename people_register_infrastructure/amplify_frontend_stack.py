@@ -1,10 +1,8 @@
 from aws_cdk import (
     Stack,
     aws_amplify_alpha as amplify,
-    aws_s3 as s3,
     aws_iam as iam,
     CfnOutput,
-    RemovalPolicy,
 )
 from constructs import Construct
 
@@ -17,96 +15,85 @@ class AmplifyFrontendStack(Stack):
     - App ID: d2df6u91uqaaay  
     - URL: https://main.d2df6u91uqaaay.amplifyapp.com
     - Platform: WEB_COMPUTE (SSR enabled)
-    - Source: GitHub mirror (awscbba/registry-frontend) auto-synced from CodeCatalyst
+    - Source: GitHub (awscbba/registry-frontend)
     - Framework: Astro with astro-aws-amplify adapter
-    - Build: Custom build spec for SSR support
-    - Role: arn:aws:iam::142728997126:role/AmplifySSRComputeRole
+    - Build: Auto-detected Astro build
+    - Role: arn:aws:iam::142728997126:role/PeopleRegisterAmplifyStac-PeopleRegistryAmplifyAppR-E0KRtWJGrpSU
     
-    Note: The actual Amplify app is configured manually in the console
-    to avoid breaking the current working setup. This CDK stack provides
-    supporting infrastructure only.
+    This CDK stack manages the existing Amplify app configuration.
     """
 
     def __init__(self, scope: Construct, construct_id: str, **kwargs) -> None:
         super().__init__(scope, construct_id, **kwargs)
 
-        # Create S3 bucket for Amplify deployments
-        deployment_bucket = s3.Bucket(
-            self, "AmplifyDeploymentBucket",
-            bucket_name=f"amplify-deployments-d2df6u91uqaaay",
-            removal_policy=RemovalPolicy.DESTROY,
-            auto_delete_objects=True,
-            public_read_access=False,
-            block_public_access=s3.BlockPublicAccess.BLOCK_ALL
+        # Create IAM role for Amplify with proper permissions
+        amplify_role = iam.Role(
+            self, "PeopleRegistryAmplifyAppRole",
+            assumed_by=iam.ServicePrincipal("amplify.amazonaws.com"),
+            managed_policies=[
+                iam.ManagedPolicy.from_aws_managed_policy_name("AdministratorAccess-Amplify")
+            ]
         )
 
-        # Create Amplify App for SSR frontend hosting
+        # Create Amplify App matching current configuration
         amplify_app = amplify.App(
             self, "PeopleRegistryAmplifyApp",
             app_name="people-registry-frontend",
-            description="People Registry Frontend with Astro SSR support - S3 source"
-        )
-
-        # Create IAM role for Amplify to access S3
-        amplify_role = iam.Role(
-            self, "AmplifyServiceRole",
-            assumed_by=iam.ServicePrincipal("amplify.amazonaws.com"),
-            inline_policies={
-                "S3Access": iam.PolicyDocument(
-                    statements=[
-                        iam.PolicyStatement(
-                            effect=iam.Effect.ALLOW,
-                            actions=[
-                                "s3:GetObject",
-                                "s3:GetObjectVersion", 
-                                "s3:ListBucket"
-                            ],
-                            resources=[
-                                deployment_bucket.bucket_arn,
-                                f"{deployment_bucket.bucket_arn}/*"
-                            ]
-                        )
-                    ]
+            description="People Registry Frontend with Astro SSR support - S3 source",
+            source_code_provider=amplify.GitHubSourceCodeProvider(
+                owner="awscbba",
+                repository="registry-frontend",
+                oauth_token=None  # Uses GitHub App connection
+            ),
+            platform=amplify.Platform.WEB_COMPUTE,
+            role=amplify_role,
+            environment_variables={
+                "HOST": "0.0.0.0",
+                "NODE_ENV": "production", 
+                "PORT": "3000",
+                "PUBLIC_API_URL": "https://2t9blvt2c1.execute-api.us-east-1.amazonaws.com/prod",
+                "_CUSTOM_IMAGE": "amplify:al2023",
+                "_LIVE_UPDATES": "[{\"name\":\"Amplify CLI\",\"pkg\":\"@aws-amplify/cli\",\"type\":\"npm\",\"version\":\"latest\"}]"
+            },
+            custom_rules=[
+                amplify.CustomRule(
+                    source="/<*>",
+                    target="/index.html",
+                    status=amplify.RedirectStatus.NOT_FOUND_REWRITE
                 )
+            ],
+            auto_branch_creation=amplify.AutoBranchCreation(
+                patterns=["*", "*/**", "deploy/**", "feature/**", "fix/**"],
+                auto_build=True,
+                stage=amplify.Stage.DEVELOPMENT
+            ),
+            auto_branch_deletion=True
+        )
+
+        # Main production branch
+        main_branch = amplify_app.add_branch(
+            "main",
+            stage=amplify.Stage.PRODUCTION,
+            auto_build=True,
+            environment_variables={
+                "AMPLIFY_BACKEND_APP_ID": "d2df6u91uqaaay",
+                "USER_BRANCH": "staging"
             }
-        )
-
-        # Add bucket policy to allow Amplify service access
-        deployment_bucket.add_to_resource_policy(
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                principals=[iam.ServicePrincipal("amplify.amazonaws.com")],
-                actions=[
-                    "s3:GetObject",
-                    "s3:GetObjectVersion",
-                    "s3:ListBucket"
-                ],
-                resources=[
-                    deployment_bucket.bucket_arn,
-                    f"{deployment_bucket.bucket_arn}/*"
-                ]
-            )
-        )
-
-        # Also allow the account to manage the bucket
-        deployment_bucket.add_to_resource_policy(
-            iam.PolicyStatement(
-                effect=iam.Effect.ALLOW,
-                principals=[iam.AccountRootPrincipal()],
-                actions=["s3:*"],
-                resources=[
-                    deployment_bucket.bucket_arn,
-                    f"{deployment_bucket.bucket_arn}/*"
-                ]
-            )
         )
 
         # Outputs
         CfnOutput(
             self, "AmplifyAppId",
             value=amplify_app.app_id,
-            description="Amplify App ID for S3-based deployments",
+            description="Amplify App ID",
             export_name="PeopleRegistryAmplifyAppId"
+        )
+
+        CfnOutput(
+            self, "AmplifyAppUrl",
+            value=f"https://main.{amplify_app.app_id}.amplifyapp.com",
+            description="Amplify App Production URL",
+            export_name="PeopleRegistryAmplifyAppUrl"
         )
 
         CfnOutput(
@@ -117,15 +104,8 @@ class AmplifyFrontendStack(Stack):
         )
 
         CfnOutput(
-            self, "DeploymentBucket",
-            value=deployment_bucket.bucket_name,
-            description="S3 bucket for Amplify deployment packages",
-            export_name="AmplifyDeploymentBucket"
-        )
-
-        CfnOutput(
-            self, "AmplifyServiceRoleOutput",
+            self, "AmplifyServiceRoleArn",
             value=amplify_role.role_arn,
-            description="IAM role for Amplify S3 access",
+            description="IAM role for Amplify service",
             export_name="AmplifyServiceRoleArn"
         )
