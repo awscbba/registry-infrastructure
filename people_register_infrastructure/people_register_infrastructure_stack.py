@@ -699,6 +699,10 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "PROJECT_IMAGES_BUCKET_NAME": project_images_bucket.bucket_name,
                 "PROJECT_IMAGES_CLOUDFRONT_DOMAIN": project_images_distribution.distribution_domain_name,
                 
+                # JWT Configuration (must match auth function)
+                "JWT_SECRET": "your-jwt-secret-change-in-production-please",
+                "JWT_EXPIRATION_HOURS": "48",
+                
                 # Other tables
                 "PASSWORD_RESET_TOKENS_TABLE_NAME": password_reset_tokens_table.table_name,
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
@@ -710,7 +714,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "CSRF_TOKEN_TABLE_NAME": csrf_token_table.table_name,
                 "CSRF_SECRET": "production-csrf-secret-change-this-value",  # Change in production
                 "SES_FROM_EMAIL": "noreply@cbba.cloud.org.bo",  # Production verified domain email
-                "FRONTEND_URL": "https://d28z2il3z2vmpc.cloudfront.net",  # Will be updated after CloudFront creation
+                "FRONTEND_URL": "https://main.d36qiwhuhsb8gy.amplifyapp.com",  # Updated to new Amplify app
             },
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -804,7 +808,7 @@ class PeopleRegisterInfrastructureStack(Stack):
             )
         )
 
-        # API Gateway
+        # API Gateway - Updated 2025-10-12 for proper routing
         api = apigateway.RestApi(
             self, "PeopleRegisterApi",
             rest_api_name="People Register API",
