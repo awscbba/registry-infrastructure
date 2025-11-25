@@ -808,7 +808,7 @@ class PeopleRegisterInfrastructureStack(Stack):
             )
         )
 
-        # API Gateway - Updated 2025-10-12 for proper routing
+        # API Gateway - Updated 2025-11-25 for comprehensive CORS support
         api = apigateway.RestApi(
             self, "PeopleRegisterApi",
             rest_api_name="People Register API",
@@ -816,7 +816,23 @@ class PeopleRegisterInfrastructureStack(Stack):
             default_cors_preflight_options=apigateway.CorsOptions(
                 allow_origins=apigateway.Cors.ALL_ORIGINS,
                 allow_methods=apigateway.Cors.ALL_METHODS,
-                allow_headers=["Content-Type", "X-Amz-Date", "Authorization", "X-Api-Key"],
+                allow_headers=[
+                    "Content-Type",
+                    "X-Amz-Date",
+                    "Authorization",
+                    "X-Api-Key",
+                    "X-Amz-Security-Token",
+                    "X-Requested-With",
+                    "Accept",
+                    "Accept-Language",
+                    "Content-Language",
+                ],
+                expose_headers=[
+                    "Access-Control-Allow-Origin",
+                    "Access-Control-Allow-Headers",
+                ],
+                allow_credentials=True,
+                max_age=Duration.hours(1),
             ),
         )
 
