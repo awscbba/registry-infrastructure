@@ -5,7 +5,7 @@ from aws_cdk import (
     aws_dynamodb as dynamodb,
     aws_s3 as s3,
     aws_cloudfront as cloudfront,
-    aws_cloudfront_origins as origins,
+    aws_cloudfront_origins as cloudfront_origins,
     aws_s3_deployment as s3deploy,
     aws_iam as iam,
     aws_ses as ses,
@@ -469,6 +469,74 @@ class PeopleRegisterInfrastructureStack(Stack):
             projection_type=dynamodb.ProjectionType.ALL
         )
 
+        # DynamoDB Table for storing project form submissions (Dynamic Form Builder)
+        project_submissions_table = dynamodb.Table(
+            self, "ProjectSubmissionsTable",
+            table_name="ProjectSubmissions",
+            partition_key=dynamodb.Attribute(
+                name="id",
+                type=dynamodb.AttributeType.STRING
+            ),
+            billing_mode=dynamodb.BillingMode.PAY_PER_REQUEST,
+            removal_policy=RemovalPolicy.DESTROY,
+            point_in_time_recovery_specification=dynamodb.PointInTimeRecoverySpecification(
+                point_in_time_recovery_enabled=True
+            ),
+        )
+
+        # Add GSI for querying submissions by project
+        project_submissions_table.add_global_secondary_index(
+            index_name="ProjectIndex",
+            partition_key=dynamodb.Attribute(
+                name="projectId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # Add GSI for querying submissions by person
+        project_submissions_table.add_global_secondary_index(
+            index_name="PersonIndex",
+            partition_key=dynamodb.Attribute(
+                name="personId",
+                type=dynamodb.AttributeType.STRING
+            ),
+            projection_type=dynamodb.ProjectionType.ALL
+        )
+
+        # S3 Bucket for project images (Dynamic Form Builder)
+        project_images_bucket = s3.Bucket(
+            self, "ProjectImagesBucket",
+            bucket_name=f"people-registry-project-images-{self.account}-{self.region}",
+            removal_policy=RemovalPolicy.DESTROY,
+            auto_delete_objects=True,
+            cors=[s3.CorsRule(
+                allowed_methods=[s3.HttpMethods.GET, s3.HttpMethods.PUT, s3.HttpMethods.POST],
+                allowed_origins=["*"],  # Configure for your domain in production
+                allowed_headers=["*"],
+                max_age=3000
+            )],
+            lifecycle_rules=[
+                s3.LifecycleRule(
+                    id="DeleteIncompleteMultipartUploads",
+                    abort_incomplete_multipart_upload_after=Duration.days(1)
+                )
+            ]
+        )
+
+        # CloudFront Distribution for project images
+        project_images_distribution = cloudfront.Distribution(
+            self, "ProjectImagesDistribution",
+            default_behavior=cloudfront.BehaviorOptions(
+                origin=cloudfront_origins.S3Origin(project_images_bucket),
+                viewer_protocol_policy=cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+                cache_policy=cloudfront.CachePolicy.CACHING_OPTIMIZED,
+                allowed_methods=cloudfront.AllowedMethods.ALLOW_GET_HEAD_OPTIONS,
+            ),
+            price_class=cloudfront.PriceClass.PRICE_CLASS_100,  # Use only North America and Europe
+            comment="CloudFront distribution for project images"
+        )
+
         # AWS SES Configuration for Email Services
         # Note: For development, we'll rely on manual SES setup
         # In production, you would verify your domain and email addresses through the AWS Console
@@ -578,10 +646,24 @@ class PeopleRegisterInfrastructureStack(Stack):
                     "dynamodb:Scan"
                 ],
                 resources=[
+                    # Base tables (required for Scan operations)
+                    people_table.table_arn,
+                    people_table_v2.table_arn,
+                    audit_logs_table.table_arn,
+                    password_reset_tokens_table.table_arn,
+                    roles_table.table_arn,
+                    account_lockout_table.table_arn,
+                    email_tracking_table.table_arn,
+                    password_history_table.table_arn,
+                    session_tracking_table.table_arn,
+                    rate_limit_table.table_arn,
+                    csrf_token_table.table_arn,
+                    
+                    # Table indexes (GSI)
                     people_table.table_arn + "/index/*",
-                    people_table_v2.table_arn + "/index/*",  # CRITICAL FIX: Add V2 table GSI access
+                    people_table_v2.table_arn + "/index/*",
                     audit_logs_table.table_arn + "/index/*",
-                    roles_table.table_arn + "/index/*",  # CRITICAL FIX: Add roles table GSI access
+                    roles_table.table_arn + "/index/*",
                     f"arn:aws:dynamodb:{self.region}:{self.account}:table/*/index/*"
                 ]
             )
@@ -610,6 +692,17 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "PROJECTS_TABLE_V2_NAME": projects_table_v2.table_name,
                 "SUBSCRIPTIONS_TABLE_V2_NAME": subscriptions_table_v2.table_name,
                 
+                # Dynamic Form Builder tables
+                "PROJECT_SUBMISSIONS_TABLE_NAME": project_submissions_table.table_name,
+                
+                # S3 and CloudFront for project images
+                "PROJECT_IMAGES_BUCKET_NAME": project_images_bucket.bucket_name,
+                "PROJECT_IMAGES_CLOUDFRONT_DOMAIN": project_images_distribution.distribution_domain_name,
+                
+                # JWT Configuration (must match auth function)
+                "JWT_SECRET": "your-jwt-secret-change-in-production-please",
+                "JWT_EXPIRATION_HOURS": "48",
+                
                 # Other tables
                 "PASSWORD_RESET_TOKENS_TABLE_NAME": password_reset_tokens_table.table_name,
                 "AUDIT_LOGS_TABLE_NAME": audit_logs_table.table_name,
@@ -621,7 +714,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "CSRF_TOKEN_TABLE_NAME": csrf_token_table.table_name,
                 "CSRF_SECRET": "production-csrf-secret-change-this-value",  # Change in production
                 "SES_FROM_EMAIL": "noreply@cbba.cloud.org.bo",  # Production verified domain email
-                "FRONTEND_URL": "https://d28z2il3z2vmpc.cloudfront.net",  # Will be updated after CloudFront creation
+                "FRONTEND_URL": "https://main.d36qiwhuhsb8gy.amplifyapp.com",  # Updated to new Amplify app
             },
             timeout=Duration.seconds(30),
             memory_size=512,
@@ -637,6 +730,12 @@ class PeopleRegisterInfrastructureStack(Stack):
         people_table_v2.grant_read_write_data(api_lambda)
         projects_table_v2.grant_read_write_data(api_lambda)
         subscriptions_table_v2.grant_read_write_data(api_lambda)
+        
+        # Dynamic Form Builder tables
+        project_submissions_table.grant_read_write_data(api_lambda)
+        
+        # Grant S3 permissions for project images
+        project_images_bucket.grant_read_write(api_lambda)
         
         # Other tables
         password_reset_tokens_table.grant_read_write_data(api_lambda)
@@ -662,17 +761,32 @@ class PeopleRegisterInfrastructureStack(Stack):
                     "dynamodb:Scan"
                 ],
                 resources=[
-                    # Legacy tables GSI
+                    # Base tables (required for Scan operations)
+                    people_table.table_arn,
+                    projects_table.table_arn,
+                    subscriptions_table.table_arn,
+                    people_table_v2.table_arn,
+                    projects_table_v2.table_arn,
+                    subscriptions_table_v2.table_arn,
+                    audit_logs_table.table_arn,
+                    password_reset_tokens_table.table_arn,
+                    roles_table.table_arn,
+                    account_lockout_table.table_arn,
+                    email_tracking_table.table_arn,
+                    password_history_table.table_arn,
+                    session_tracking_table.table_arn,
+                    rate_limit_table.table_arn,
+                    csrf_token_table.table_arn,
+                    
+                    # Table indexes (GSI)
                     people_table.table_arn + "/index/*",
                     password_reset_tokens_table.table_arn + "/index/*",
-                    roles_table.table_arn + "/index/*",  # RBAC roles table GSI
-                    
-                    # Standardized tables (V2) GSI
+                    roles_table.table_arn + "/index/*",
                     people_table_v2.table_arn + "/index/*",
                     projects_table_v2.table_arn + "/index/*",
                     subscriptions_table_v2.table_arn + "/index/*",
                     
-                    # Wildcard for any other indexes
+                    # Wildcard for any other tables/indexes
                     f"arn:aws:dynamodb:{self.region}:{self.account}:table/*/index/*"
                 ]
             )
@@ -694,7 +808,7 @@ class PeopleRegisterInfrastructureStack(Stack):
             )
         )
 
-        # API Gateway
+        # API Gateway - Updated 2025-11-25 for comprehensive CORS support
         api = apigateway.RestApi(
             self, "PeopleRegisterApi",
             rest_api_name="People Register API",
@@ -702,7 +816,23 @@ class PeopleRegisterInfrastructureStack(Stack):
             default_cors_preflight_options=apigateway.CorsOptions(
                 allow_origins=apigateway.Cors.ALL_ORIGINS,
                 allow_methods=apigateway.Cors.ALL_METHODS,
-                allow_headers=["Content-Type", "X-Amz-Date", "Authorization", "X-Api-Key"],
+                allow_headers=[
+                    "Content-Type",
+                    "X-Amz-Date",
+                    "Authorization",
+                    "X-Api-Key",
+                    "X-Amz-Security-Token",
+                    "X-Requested-With",
+                    "Accept",
+                    "Accept-Language",
+                    "Content-Language",
+                ],
+                expose_headers=[
+                    "Access-Control-Allow-Origin",
+                    "Access-Control-Allow-Headers",
+                ],
+                allow_credentials=True,
+                max_age=Duration.hours(1),
             ),
         )
 
@@ -777,17 +907,14 @@ function handler(event) {
         return request;
     }
     
-    // If URI doesn't have an extension and doesn't end with /
-    if (!uri.includes('.') && !uri.endsWith('/')) {
-        // Check if it's a known directory path
-        if (uri === '/admin' || uri === '/login' || uri === '/dashboard' || uri.startsWith('/subscribe/')) {
-            request.uri = uri + '/index.html';
-        }
+    // If URI has a file extension, serve it as-is (assets like .js, .css, .png, etc.)
+    if (uri.includes('.')) {
+        return request;
     }
-    // If URI ends with / but isn't root
-    else if (uri.endsWith('/') && uri !== '/') {
-        request.uri = uri + 'index.html';
-    }
+    
+    // For all other paths (React Router routes), serve index.html
+    // This includes paths like /subscribe/voluntarios/, /admin, /login, etc.
+    request.uri = '/index.html';
     
     return request;
 }
@@ -799,7 +926,7 @@ function handler(event) {
         distribution = cloudfront.Distribution(
             self, "FrontendDistribution",
             default_behavior=cloudfront.BehaviorOptions(
-                origin=origins.S3Origin(
+                origin=cloudfront_origins.S3Origin(
                     frontend_bucket,
                     origin_access_identity=origin_access_identity
                 ),
@@ -883,4 +1010,26 @@ function handler(event) {
             value=subscriptions_table_v2.table_name,
             description="Standardized Subscriptions DynamoDB table name (V2)",
             export_name="SubscriptionsTableV2Name"
+        )
+
+        # Dynamic Form Builder Outputs
+        CfnOutput(
+            self, "ProjectSubmissionsTableName",
+            value=project_submissions_table.table_name,
+            description="Project Submissions DynamoDB table name",
+            export_name="ProjectSubmissionsTableName"
+        )
+
+        CfnOutput(
+            self, "ProjectImagesBucketName",
+            value=project_images_bucket.bucket_name,
+            description="S3 bucket for project images",
+            export_name="ProjectImagesBucketName"
+        )
+
+        CfnOutput(
+            self, "ProjectImagesCloudFrontDomain",
+            value=project_images_distribution.distribution_domain_name,
+            description="CloudFront domain for project images",
+            export_name="ProjectImagesCloudFrontDomain"
         )
