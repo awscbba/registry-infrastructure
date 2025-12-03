@@ -80,19 +80,23 @@ jobs:
               diffOutput = 'No diff output available';
             }
 
+            const synthStatus = '${{ steps.synth.outcome }}' === 'success' ? '✅ Passed' : '❌ Failed';
+            const synthMessage = '${{ steps.synth.outcome }}' === 'success' ? '✅ Synthesis successful' : '❌ Synthesis failed';
+            const truncateWarning = diffOutput.length > 60000 ? '⚠️ Diff output truncated. Check workflow logs for full output.' : '';
+
             const comment = `## 🔍 Infrastructure Validation Results
 
-            **Status:** ${{ steps.synth.outcome == 'success' ? '✅ Passed' : '❌ Failed' }}
+            **Status:** ${synthStatus}
 
             ### CDK Synthesis
-            ${{ steps.synth.outcome == 'success' ? '✅ Synthesis successful' : '❌ Synthesis failed' }}
+            ${synthMessage}
 
             ### Infrastructure Changes
             \`\`\`
             ${diffOutput.substring(0, 60000)}
             \`\`\`
 
-            ${diffOutput.length > 60000 ? '⚠️ Diff output truncated. Check workflow logs for full output.' : ''}
+            ${truncateWarning}
             `;
 
             github.rest.issues.createComment({
