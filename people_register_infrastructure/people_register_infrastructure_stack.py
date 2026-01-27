@@ -593,7 +593,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 # Email and frontend configuration
                 "CSRF_SECRET": "production-csrf-secret-change-this-value",
                 "SES_FROM_EMAIL": "noreply@cbba.cloud.org.bo",
-                "FRONTEND_URL": "https://registry.cbba.cloud.org.bo",
+                "FRONTEND_URL": "https://registry.cloud.org.bo",
             }
         )
         
@@ -714,7 +714,7 @@ class PeopleRegisterInfrastructureStack(Stack):
                 "CSRF_TOKEN_TABLE_NAME": csrf_token_table.table_name,
                 "CSRF_SECRET": "production-csrf-secret-change-this-value",  # Change in production
                 "SES_FROM_EMAIL": "noreply@cbba.cloud.org.bo",  # Production verified domain email
-                "FRONTEND_URL": "https://registry.cbba.cloud.org.bo",  # Production domain
+                "FRONTEND_URL": "https://registry.cloud.org.bo",  # Production domain
             },
             timeout=Duration.seconds(30),
             memory_size=512,
